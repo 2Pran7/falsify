@@ -1,0 +1,33 @@
+# Secrets — never commit. THE line that matters.
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE / editor
+.vscode/
+.idea/
+.DS_Store
+
+# Data — market data lives in the DB, never in git
+*.parquet
+*.csv
+data/
+
+# Node (for when web/ arrives in Module 5)
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Env variants
+.env.local
+.env.*.local
