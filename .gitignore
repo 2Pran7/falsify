@@ -1,4 +1,3 @@
-# Secrets — never commit. THE line that matters.
 .env
 
 # Python
