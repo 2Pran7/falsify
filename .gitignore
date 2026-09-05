@@ -20,7 +20,7 @@ htmlcov/
 # Data — market data lives in the DB, never in git
 *.parquet
 *.csv
-data/
+/data/
 
 # Node (for when web/ arrives in Module 5)
 node_modules/
