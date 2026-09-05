@@ -48,6 +48,9 @@ class BacktestResult:
         return self.returns["ret"]
 
 
+_W_SCHEMA = {"ts": pl.Date, "ticker": pl.Utf8, "w": pl.Float64}
+
+
 def forward_returns(prices: pl.DataFrame) -> pl.DataFrame:
     """Append `fwd_ret`: the return from t to t+1, per ticker.
 
@@ -64,7 +67,14 @@ def forward_returns(prices: pl.DataFrame) -> pl.DataFrame:
     This is the ONLY place a negative shift is allowed to appear in this
     codebase. Confining it to one function keeps lookahead bias auditable.
     """
-    raise NotImplementedError
+    # sort first: a shift is POSITIONAL, so "the next row" only means "tomorrow"
+    # if the rows are already in date order within each ticker.
+    return prices.sort(["ticker", "ts"]).with_columns(
+        # shift(-1) pulls tomorrow's close up onto today's row.
+        # .over("ticker") keeps each company's shift inside its own block, so
+        # AAPL's last row cannot reach into AMZN's first row.
+        (pl.col("close").shift(-1).over("ticker") / pl.col("close") - 1.0).alias("fwd_ret")
+    )
 
 
 def compute_turnover(weights: pl.DataFrame) -> pl.DataFrame:
@@ -85,7 +95,29 @@ def compute_turnover(weights: pl.DataFrame) -> pl.DataFrame:
     Returns:
         Frame (ts, turnover), one row per date, sorted by ts.
     """
-    raise NotImplementedError
+    if weights.is_empty():
+        return pl.DataFrame(schema={"ts": pl.Date, "turnover": pl.Float64})
+
+    # Build every (date, ticker) pair, so a ticker that DISAPPEARS from the
+    # portfolio still gets a row with w = 0 and is counted as a sale. Without
+    # this, exits are invisible and turnover is understated.
+    dates = pl.DataFrame({"ts": weights["ts"].unique().sort()})
+    tickers = pl.DataFrame({"ticker": weights["ticker"].unique().sort()})
+    grid = dates.join(tickers, how="cross")
+
+    return (
+        grid.join(weights, on=["ts", "ticker"], how="left")
+        .with_columns(pl.col("w").fill_null(0.0))       # not held that day = 0
+        .sort(["ticker", "ts"])
+        .with_columns(
+            # how much this position moved since yesterday. fill_null(0.0)
+            # handles the first date: the book starts flat, so all is new.
+            (pl.col("w") - pl.col("w").shift(1).over("ticker").fill_null(0.0))
+            .abs().alias("dw")
+        )
+        .group_by("ts").agg(pl.col("dw").sum().alias("turnover"))
+        .sort("ts")
+    )
 
 
 def run_backtest(
@@ -119,4 +151,43 @@ def run_backtest(
     still appear in the output series. A backtest that silently skips its
     out-of-position days reports the Sharpe of a strategy nobody ran.
     """
-    raise NotImplementedError
+    config = config or BacktestConfig()
+    fwd = forward_returns(prices)
+
+    # THE DATE SPINE. Every trading day except the last, which has no tomorrow.
+    # Building the output from this (rather than from the weights) is what makes
+    # out-of-position days show up as 0.0 instead of vanishing.
+    all_dates = fwd["ts"].unique().sort()
+    spine = pl.DataFrame({"ts": all_dates.head(len(all_dates) - 1)})
+
+    w = weights if not weights.is_empty() else pl.DataFrame(schema=_W_SCHEMA)
+
+    # THE ONE LINE THAT MATTERS: today's weight meets today's FORWARD return.
+    # w is decided from data through ts; fwd_ret is what follows it.
+    gross = (
+        w.join(fwd.select(["ts", "ticker", "fwd_ret"]), on=["ts", "ticker"], how="left")
+        .with_columns((pl.col("w") * pl.col("fwd_ret")).alias("contrib"))
+        .group_by("ts").agg(pl.col("contrib").sum().alias("gross_ret"))
+    )
+
+    turn = compute_turnover(w)
+
+    out = (
+        spine
+        .join(gross, on="ts", how="left")
+        .join(turn, on="ts", how="left")
+        .with_columns(
+            pl.col("gross_ret").fill_null(0.0),   # no position that day = flat
+            pl.col("turnover").fill_null(0.0),
+        )
+        .with_columns((pl.col("turnover") * config.cost_bps / 10_000.0).alias("cost"))
+        .with_columns((pl.col("gross_ret") - pl.col("cost")).alias("ret"))
+        .sort("ts")
+    )
+
+    return BacktestResult(
+        returns=out.select(["ts", "gross_ret", "cost", "ret"]),
+        weights=w,
+        turnover=turn,
+        config=config,
+    )
