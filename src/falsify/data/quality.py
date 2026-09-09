@@ -1,17 +1,15 @@
 """Data-quality gates for the price panel.
 
-Vendor price series are keyed by ticker string, not by a permanent security
-identifier. When a listing is delisted, merged or renamed, its ticker is freed
-and can be reassigned to an entirely different company, at which point a naive
-series splices two securities end to end. The result is a fictitious return of
-several hundred percent and, worse, a momentum score computed across the join
-that stays wrong for a full year afterwards.
+Vendor price series are keyed by ticker string, not a permanent security id.
+A delisted, merged or renamed listing frees its ticker for reassignment to an
+entirely different company, and a naive series then splices two securities end
+to end: a fictitious several-hundred-percent return and, worse, a momentum
+score computed across the join that stays wrong for a full year.
 
-The checks here are deliberately structural rather than statistical. A screen on
-"unusually large returns" cannot work: real equities move 30-40% on earnings and
-over 100% on takeover news, so any threshold low enough to catch a splice also
-discards genuine events, and discarding genuine large moves biases a momentum
-backtest in a way that flatters it.
+The checks are deliberately structural, not statistical. A screen on "unusually
+large returns" cannot work: real equities move 30-40% on earnings and over 100%
+on takeover news, so any threshold low enough to catch a splice also discards
+genuine events, which biases a momentum backtest in a flattering direction.
 
 Two signatures identify a splice without touching the return distribution:
 

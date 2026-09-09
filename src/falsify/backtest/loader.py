@@ -1,8 +1,7 @@
 """Database access: daily_bars -> long-format Polars frames.
 
-No methodology decisions are made here. Rows are read from daily_bars and
-returned in the shape features/library.py expects: one row per (ticker, ts),
-sorted by (ticker, ts).
+No methodology decisions here. Rows come back in the shape features/library.py
+expects: one row per (ticker, ts), sorted by (ticker, ts).
 """
 from __future__ import annotations
 

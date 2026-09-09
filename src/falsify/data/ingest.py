@@ -81,6 +81,6 @@ def ingest_universe(tickers: list[str], years: int = 5) -> None:
             try:
                 n = ingest_ticker(client, conn, t, from_date, to_date)
                 print(f"[{i}/{len(tickers)}] {t}: {n} rows" + (" (skipped)" if n == 0 else ""))
-            except Exception as e:  # noqa: BLE001 — log and continue; one bad ticker shouldn't kill the run
+            except Exception as e:  # noqa: BLE001 - one bad ticker must not kill the run
                 print(f"[{i}/{len(tickers)}] {t}: FAILED — {e}")
     client.close()

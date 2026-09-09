@@ -1,15 +1,12 @@
 """Reconciliation of the engine against an independently computed result.
 
-Two layers:
+Two layers: a synthetic reconciliation that always runs, showing the engine's
+buy-and-hold output equals direct compounding of the same prices; and the same
+check against real SPY bars, skipped when the database is unreachable or SPY
+is not ingested, so the suite stays green on a fresh clone.
 
-  1. A synthetic reconciliation that always runs, establishing that the engine's
-     buy-and-hold output equals a direct compounding of the same prices.
-  2. The same reconciliation against real SPY bars from the database. Skipped
-     automatically when the database is unreachable or SPY has not been
-     ingested, so the suite stays green on a fresh clone.
-
-The reference value is recomputed rather than hardcoded. A stored constant would
-go stale as the data window is extended; an independent recomputation does not.
+The reference value is recomputed rather than hardcoded. A stored constant goes
+stale as the data window extends; an independent recomputation does not.
 """
 from __future__ import annotations
 
@@ -24,18 +21,15 @@ from falsify.backtest.portfolio import fixed_weights
 
 
 def _direct_buy_and_hold(prices: pl.DataFrame) -> float:
-    """The result computed without the engine: last close over first close.
-
-    Buy at the first close, sell at the last. No weights, no joins, no shifts.
-    Disagreement with this value means the engine is wrong.
-    """
+    """The result computed without the engine: last close over first close. No
+    weights, no joins, no shifts. Disagreement means the engine is wrong."""
     p = prices.sort("ts")["close"]
     return float(p[-1] / p[0] - 1.0)
 
 
-# ---------------------------------------------------------------------------
-# 1. Synthetic. Always runs.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Synthetic. Always runs.
+# --------------------------------------------------------------------------
 
 def test_engine_matches_direct_buy_and_hold_synthetic():
     import random
@@ -76,9 +70,9 @@ def test_costs_only_reduce_returns():
     assert paid < free
 
 
-# ---------------------------------------------------------------------------
-# 2. Real data. Skips cleanly when the DB is not there.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Real data. Skips cleanly when the DB is not there.
+# --------------------------------------------------------------------------
 
 def _load_spy() -> pl.DataFrame | None:
     try:
@@ -104,9 +98,9 @@ def test_engine_reproduces_real_spy_buy_and_hold():
 
 @needs_spy
 def test_real_spy_volatility_is_plausible():
-    """A band, not a point. SPY's annualised volatility has sat roughly between
-    10% and 25% for decades. A reported 80% indicates a fault regardless of how
-    plausible the cumulative return looks."""
+    """A band, not a point. SPY's annualised vol has sat roughly between 10%
+    and 25% for decades; a reported 80% indicates a fault however plausible the
+    cumulative return looks."""
     res = run_backtest(spy, fixed_weights(spy["ts"], "SPY"))
     vol = m.ann_vol(res.ret)
     assert 0.05 < vol < 0.45, f"SPY annualised vol came out at {vol:.1%}"
@@ -114,9 +108,9 @@ def test_real_spy_volatility_is_plausible():
 
 @needs_spy
 def test_real_spy_has_no_gaps_in_the_return_series():
-    """Every trading day except the last must appear exactly once. A missing
-    day indicates a silent join failure, which would report the Sharpe of a
-    strategy that was not continuously invested."""
+    """Every trading day except the last appears exactly once. A missing day
+    means a silent join failure, reporting the Sharpe of a strategy that was
+    not continuously invested."""
     res = run_backtest(spy, fixed_weights(spy["ts"], "SPY"))
     assert len(res.returns) == spy["ts"].n_unique() - 1
     assert res.returns["ts"].n_unique() == len(res.returns)

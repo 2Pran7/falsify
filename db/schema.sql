@@ -3,8 +3,12 @@
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
--- Daily OHLCV bars. Prices are SPLIT/DIVIDEND ADJUSTED at ingest time
--- (Polygon adjusted=true). This is the canonical price table.
+-- Daily OHLCV bars. Prices are SPLIT-ADJUSTED ONLY at ingest time.
+-- Polygon's adjusted=true applies split adjustments and NOT dividend
+-- adjustments, so everything derived from these closes is a PRICE return,
+-- never a total return. See src/falsify/data/polygon_client.py for the full
+-- note and the consequences for the Ken French UMD comparison.
+-- This is the canonical price table.
 CREATE TABLE IF NOT EXISTS daily_bars (
     ticker      TEXT             NOT NULL,
     ts          DATE             NOT NULL,   -- trading date
@@ -22,10 +26,17 @@ SELECT create_hypertable('daily_bars', 'ts', if_not_exists => TRUE);
 
 CREATE INDEX IF NOT EXISTS idx_daily_bars_ticker ON daily_bars (ticker, ts DESC);
 
--- Universe snapshot: which tickers we consider part of the S&P 500 and WHEN
--- we recorded that membership. This is NOT point-in-time historical membership
--- (that data isn't on cheap Polygon tiers) — it's a snapshot with a recorded
--- as_of date so the survivorship-bias audit in Module 3 has something to work with.
+-- Universe snapshot: which tickers were in the S&P 500, and as of when.
+--
+-- Two populations of rows share this table, distinguished only by as_of:
+--   * run_ingest.py writes ONE snapshot dated the day the ingest ran. On its
+--     own that is useless for a survivorship audit: a single as_of cannot show
+--     anyone leaving the index.
+--   * build_pit_universe.py backfills ~190 dated snapshots reconstructed from
+--     the git history of the maintained constituents CSV, reaching to 2012.
+--     Those are what make the Module 3 audit runnable.
+-- as_of is the date membership was RECORDED, not the effective date of the
+-- index change; see src/falsify/data/pit_universe.py.
 CREATE TABLE IF NOT EXISTS universe_snapshot (
     ticker      TEXT NOT NULL,
     index_name  TEXT NOT NULL DEFAULT 'SP500',

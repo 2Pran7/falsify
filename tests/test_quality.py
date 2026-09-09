@@ -1,9 +1,9 @@
 """Data-quality gate tests.
 
-The governing constraint is that these checks must catch a ticker-reuse splice
-WITHOUT discarding genuine large moves. Real equities move 40% on earnings and
-over 100% on takeover news, and dropping those rows would bias a momentum
-backtest in a flattering direction, so the tests below pin both behaviours.
+The governing constraint: catch a ticker-reuse splice WITHOUT discarding
+genuine large moves. Real equities move 40% on earnings and over 100% on
+takeover news, and dropping those rows would bias a momentum backtest in a
+flattering direction, so both behaviours are pinned below.
 """
 from __future__ import annotations
 
@@ -60,8 +60,8 @@ def test_does_not_flag_a_genuine_earnings_crash():
 
 
 def test_does_not_flag_a_genuine_takeover_or_trial_move():
-    """Moderna moved +177% on Phase 3 melanoma data. A 2.77x ratio is real and
-    must not be screened out; only ratios past 4x are treated as impossible."""
+    """Moderna moved +177% on Phase 3 melanoma data. A 2.77x ratio is real;
+    only ratios past 4x are treated as impossible."""
     panel = _panel({"MRNA": [(0, 62.96), (1, 174.40), (2, 170.00)]})
     assert flag_suspect_tickers(panel).is_empty()
 

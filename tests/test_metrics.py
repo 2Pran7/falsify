@@ -1,8 +1,7 @@
 """Metrics tests.
 
-Every expected value is computed by hand rather than captured from a run of the
-code under test. A test that asserts whatever the implementation already does
-proves nothing.
+Every expected value is computed by hand, not captured from a run of the code
+under test: a test asserting whatever the implementation does proves nothing.
 """
 from __future__ import annotations
 
@@ -29,12 +28,9 @@ def test_zero_returns_are_flat_not_crashed():
 
 
 def test_sharpe_matches_hand_computation():
-    """A series engineered to have mean exactly 0.001 and sample sd exactly 0.01.
-
-    Sharpe is then 0.001 / 0.01 * sqrt(252) = 0.1 * sqrt(252) ~= 1.5875.
-    A result of 1.5843 indicates ddof=0, which is why the convention is pinned
-    in the module docstring.
-    """
+    """Mean exactly 0.001, sample sd exactly 0.01, so Sharpe is
+    0.001 / 0.01 * sqrt(252) ~= 1.5875. A result of 1.5843 indicates ddof=0,
+    which is why the convention is pinned in the module docstring."""
     raw = pl.Series("x", [float(i) for i in range(TD)])
     z = (raw - raw.mean()) / raw.std(ddof=1)      # mean 0, sd 1
     r = (z * 0.01 + 0.001).rename("ret")          # mean 0.001, sd 0.01
@@ -48,12 +44,10 @@ def test_sharpe_matches_hand_computation():
 
 
 def test_sharpe_subtracts_the_risk_free_rate_annually():
-    """rf is an annual rate and must be de-annualised before subtracting.
-
-    A constant daily return of 0.001 with rf = 0.252 annual gives a daily rf of
-    0.001, so excess is identically zero, volatility is zero and the result is
-    nan. A finite result indicates 0.252 was subtracted from each day.
-    """
+    """rf is annual and must be de-annualised before subtracting. A constant
+    0.001 daily return with rf = 0.252 gives a daily rf of 0.001, so excess is
+    identically zero, vol is zero and the result is nan. A finite result means
+    0.252 was subtracted from each day."""
     r = pl.Series("ret", [0.001] * TD)
     assert math.isnan(m.sharpe(r, rf=0.252))
 
@@ -68,8 +62,8 @@ def test_cagr_doubles_over_one_year():
 
 
 def test_cagr_annualises_a_partial_year():
-    """126 days (half a year) compounding to +100% annualises to +300%, because
-    doubling twice is 4x. Catches annualisation by division."""
+    """Half a year compounding to +100% annualises to +300%: doubling twice is
+    4x. Catches annualisation by division."""
     n = 126
     daily = 2 ** (1 / n) - 1
     r = pl.Series("ret", [daily] * n)
@@ -85,12 +79,9 @@ def test_max_drawdown_100_to_50_to_75():
 
 
 def test_max_drawdown_counts_the_first_day():
-    """A series that ONLY falls. Equity 1.0 -> 0.9 -> 0.81.
-
-    The peak is the starting capital of 1.0, so the drawdown is -19%. An equity
-    curve built without a leading 1.0 makes the first observation its own peak
-    and reports -10% instead.
-    """
+    """A series that ONLY falls: equity 1.0 -> 0.9 -> 0.81. The peak is the
+    starting capital of 1.0, so the drawdown is -19%. A curve built without a
+    leading 1.0 makes the first observation its own peak and reports -10%."""
     r = pl.Series("ret", [-0.1, -0.1])
     assert m.max_drawdown(r) == pytest.approx(0.81 - 1.0, rel=1e-12)
 
@@ -101,8 +92,8 @@ def test_max_drawdown_is_zero_for_a_monotonic_riser():
 
 
 def test_summary_has_the_agreed_keys():
-    """The statistics layer and the eval scorer both read this dict, so its
-    keys are fixed by a test."""
+    """The statistics layer and the eval scorer both read this dict, so its keys
+    are fixed by a test."""
     r = pl.Series("ret", [0.001, -0.002, 0.003] * 50)
     s = m.summary(r)
 

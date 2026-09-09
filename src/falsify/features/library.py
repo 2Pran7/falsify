@@ -1,13 +1,11 @@
 """Feature library.
 
-Every function takes a long-format Polars frame (ticker, ts, close, ...)
-sorted by (ticker, ts) and returns the frame with ONE new column appended.
-Composable: chain them. All windows are in TRADING DAYS.
+Every function takes a long-format Polars frame (ticker, ts, close, ...) sorted
+by (ticker, ts) and appends ONE column. Chainable. Windows are TRADING DAYS.
 
-METHODOLOGY RULE baked in everywhere: features at time t use data up to and
-INCLUDING t, never after. Any feature used to trade at t must be lagged by
-the caller (the backtester does this) — computing it correctly here and
-shifting at the point of use keeps lookahead bias in exactly one place.
+METHODOLOGY RULE: features at time t use data up to and INCLUDING t, never
+after. Lagging for trade use is the caller's job (the backtester does it), so
+lookahead bias lives in exactly one place.
 """
 from __future__ import annotations
 
@@ -47,9 +45,8 @@ def add_rolling_vol(df: pl.DataFrame, window: int = 21) -> pl.DataFrame:
 def add_momentum_12_1(df: pl.DataFrame, col: str = "close") -> pl.DataFrame:
     """Jegadeesh-Titman momentum: 12-month return SKIPPING the most recent month.
 
-    (close_{t-21} / close_{t-252}) - 1. The 1-month skip avoids short-term
-    reversal contaminating the signal — this is the published construction,
-    not a convenience choice.
+    (close_{t-21} / close_{t-252}) - 1. The 1-month skip keeps short-term
+    reversal out of the signal: the published construction, not a convenience.
     """
     return _sorted(df).with_columns(
         (pl.col(col).shift(21).over(OVER) / pl.col(col).shift(252).over(OVER) - 1)

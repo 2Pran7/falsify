@@ -1,14 +1,14 @@
 """S&P 500 universe.
 
-Source: the `datasets/s-and-p-500-companies` CSV on GitHub — a maintained,
-machine-readable constituents list. Chosen over scraping Wikipedia HTML
-because scraping breaks whenever the page layout or served variant changes
-(it did, on day one). Wikipedia scrape kept as a fallback.
+Source: the `datasets/s-and-p-500-companies` CSV on GitHub, a maintained
+machine-readable constituents list. Never make HTML scraping load-bearing when
+a structured source exists: the Wikipedia scrape broke on day one when the
+served page variant changed. Kept only as a fallback.
 
-HONEST LIMITATION (document, don't hide): this is the CURRENT constituent
-list, not point-in-time historical membership. Backtests on today's members
-overstate returns (survivorship bias) — dead/dropped companies are missing.
-The survivorship audit quantifies this; the methodology write-up discloses it.
+HONEST LIMITATION (document, don't hide): this is the CURRENT constituent list,
+not point-in-time membership. Backtests on today's members overstate returns
+(survivorship bias) because dead and dropped companies are missing. The
+survivorship audit quantifies this; the methodology write-up discloses it.
 """
 from __future__ import annotations
 

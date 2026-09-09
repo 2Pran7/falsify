@@ -65,13 +65,11 @@ def test_long_only_sums_to_one():
 def test_nulls_are_dropped_not_ranked_as_zero():
     """Null signals must be excluded, not ranked as zero.
 
-    mom_12_1 is null for a ticker's first 252 days. A null ranked as 0.0 would
-    sort below every positive signal and land in the short bucket, so the
-    strategy would systematically short names that are merely too young to
-    score: a real portfolio producing real-looking numbers and meaning nothing.
-
-    Every scored name here has a positive signal, so nulls treated as zero would
-    form the bottom of the cross-section and be shorted.
+    mom_12_1 is null for a ticker's first 252 days. A null ranked as 0.0 sorts
+    below every positive signal and lands in the short bucket, systematically
+    shorting names merely too young to score: a real portfolio producing
+    real-looking numbers and meaning nothing. Every scored name here has a
+    positive signal, so nulls-as-zero would form the bottom and be shorted.
     """
     d = _dates(1)[0]
     rows = [(d, f"T{i:02d}", float(i + 1)) for i in range(20)]     # signals 1..20
@@ -117,8 +115,8 @@ def test_fixed_weights_covers_every_date():
 
 
 def test_month_end_picks_the_last_trading_day_not_the_calendar_end():
-    """31 March 2024 was a Sunday. The last trading day was Thursday 28 March,
-    Good Friday having closed the 29th. Rebalancing on a closed date silently
+    """31 March 2024 was a Sunday, and Good Friday closed the 29th, so the last
+    trading day was Thursday 28 March. Rebalancing on a closed date silently
     loses a day of returns."""
     ds = pl.Series("ts", [dt.date(2024, 3, d) for d in (26, 27, 28)]
                         + [dt.date(2024, 4, d) for d in (1, 2)])
@@ -129,9 +127,9 @@ def test_month_end_picks_the_last_trading_day_not_the_calendar_end():
 def test_each_rebalance_is_a_complete_portfolio_snapshot():
     """A name absent from a rebalance is exited, not held indefinitely.
 
-    AAA is selected on day 0 and BBB on day 3. Because each rebalance is a full
-    snapshot, day 3 also implies AAA goes to zero. Treating rebalances as
-    per-ticker updates would instead leave AAA open alongside BBB.
+    AAA is selected on day 0, BBB on day 3. Each rebalance being a full
+    snapshot, day 3 also implies AAA goes to zero; per-ticker updates would
+    leave AAA open alongside BBB.
     """
     ds = _dates(6)
     rebal = pl.DataFrame(
@@ -152,11 +150,10 @@ def test_each_rebalance_is_a_complete_portfolio_snapshot():
 def test_gross_exposure_does_not_accumulate_across_rebalances():
     """Every date carries the book size the rebalance intended, and no more.
 
-    With an entirely fresh long/short pair selected at each rebalance, carrying
-    weights forward per ticker would leave every earlier selection open, so
-    gross exposure would grow by 2.0 at each rebalance rather than staying at
-    2.0. That failure produces a silently levered portfolio whose returns and
-    Sharpe look plausible.
+    A fresh long/short pair is selected at each rebalance, so carrying weights
+    forward per ticker would leave every earlier selection open and grow gross
+    exposure by 2.0 each time. The result is a silently levered portfolio whose
+    returns and Sharpe look plausible.
     """
     ds = _dates(12)
     rows = []

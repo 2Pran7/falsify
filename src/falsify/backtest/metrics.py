@@ -3,15 +3,15 @@
 Every function takes `returns`: a pl.Series of daily SIMPLE returns (not log
 returns), in chronological order. 0.01 means +1% that day.
 
-Conventions, pinned so that these metrics and the statistics layer above them
-agree. Changing any of them requires changing the tests:
+Conventions, pinned so these metrics and the statistics layer above them agree.
+Changing any of them requires changing the tests:
   - 252 trading days per year.
   - Standard deviation uses ddof=1 (sample), which is Polars' default.
   - max_drawdown is returned NEGATIVE (a 50% drawdown is -0.5).
   - Nothing here annualises by compounding except cagr.
 
-Deflated Sharpe and multiple-testing correction are layered on top of these,
-so the functions stay pure: no printing, no plotting, no database access.
+Deflated Sharpe and multiple-testing correction layer on top, so these stay
+pure: no printing, no plotting, no database access.
 """
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ def cagr(returns: pl.Series, periods_per_year: int = TRADING_DAYS) -> float:
 
         (1 + total_return) ** (periods_per_year / n) - 1
 
-    where n = len(returns). Note this uses the NUMBER OF OBSERVATIONS, not the
-    calendar span, which is the right choice when the series only has trading days.
+    n = len(returns): the NUMBER OF OBSERVATIONS, not the calendar span, which
+    is the right choice for a series of trading days only.
     """
 
     n = len(returns)
@@ -66,9 +66,8 @@ def sharpe(
 
     where excess = returns - rf / periods_per_year (rf is an ANNUAL rate).
 
-    Zero volatility makes the ratio undefined, so the result is float('nan')
-    rather than 0.0. A silent zero would let a degenerate strategy read as
-    merely mediocre instead of broken.
+    Zero volatility leaves the ratio undefined, so the result is nan, not 0.0:
+    a silent zero would read a degenerate strategy as mediocre, not broken.
     """
     excess = returns - rf / periods_per_year
     sd = excess.std(ddof=1)
@@ -81,17 +80,13 @@ def sharpe(
 
 def max_drawdown(returns: pl.Series) -> float:
     """Worst peak-to-trough decline of the equity curve, as a negative number.
-
-    The equity curve is cumprod(1 + r) with a leading 1.0. Without that leading
-    value a series that only falls reports a drawdown of 0, because its first
-    observation becomes its own high-water mark.
-
-    Returns 0.0 for a series that never declines.
+    0.0 for a series that never declines.
     """
     if len(returns) == 0:
         return float("nan")
-    # Prepend a 0% day so the curve starts at 1.0: starting capital is the
-    # first high-water mark, not the balance after day one.
+    # Prepend a 0% day so the curve starts at 1.0: starting capital is the first
+    # high-water mark. Without it, a series that only falls reports a drawdown
+    # of 0, its first observation being its own peak.
     r = pl.concat([pl.Series("r", [0.0]), returns.rename("r").cast(pl.Float64)])
     equity = (r + 1.0).cum_prod()
     drawdown = equity / equity.cum_max() - 1.0

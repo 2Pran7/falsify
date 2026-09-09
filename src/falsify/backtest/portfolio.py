@@ -1,15 +1,11 @@
 """Signal -> weights. The strategy layer.
 
-The engine knows nothing about ranking, deciles or rebalancing. All of that
-lives here, so adding a new anomaly means writing a new signal and reusing the
-rest of the pipeline unchanged.
+Ranking, deciles and rebalancing all live here, so a new anomaly means a new
+signal and the rest of the pipeline unchanged. Input is a long frame
+(ts, ticker, sig); output is (ts, ticker, w) in the shape run_backtest expects.
 
-Input everywhere is a long frame (ts, ticker, sig). Output everywhere is a long
-frame (ts, ticker, w) in exactly the shape run_backtest expects.
-
-Methodology note: nothing here shifts anything in time. Signals must already be
-computed from data up to and including ts, which features/library.py guarantees.
-The engine applies the shift, in one place, once.
+Nothing here shifts anything in time. Signals are already computed from data up
+to and including ts; the engine applies the shift, in one place, once.
 """
 from __future__ import annotations
 
@@ -38,13 +34,12 @@ def decile_weights(
         Long frame (ts, ticker, w). Dates and tickers with a null signal simply
         do not appear.
 
-    Null handling matters more here than the ranking. mom_12_1 requires 252
-    days of history, so every ticker is null for its first trading year. If
-    nulls ranked as zero they would collect in the bottom bucket, producing a
-    short book of names that are simply too young to score: a real portfolio
-    with plausible-looking returns and no meaning. Nulls are therefore dropped
-    before ranking, and bucket size is computed from the names that actually
-    scored on that date.
+    Null handling matters more here than the ranking. mom_12_1 needs 252 days
+    of history, so every ticker is null for its first trading year. Nulls
+    ranked as zero would collect in the bottom bucket and short names that are
+    merely too young to score: a real portfolio with plausible-looking returns
+    and no meaning. Nulls are dropped BEFORE ranking, and bucket size comes
+    from the names that actually scored that date.
     """
     s = signal.drop_nulls("sig")
     if s.is_empty():
@@ -63,8 +58,8 @@ def decile_weights(
     )
 
     if long_short:
-        # Need at least two names, otherwise the same ticker is both the top
-        # and the bottom of its own cross-section.
+        # Below two names the same ticker is both top and bottom of its own
+        # cross-section.
         s = s.filter(pl.col("n") >= 2)
         s = s.with_columns(
             pl.when(pl.col("rk") <= pl.col("k"))
@@ -121,19 +116,17 @@ def hold_until_next_rebalance(
 ) -> pl.DataFrame:
     """Carry each rebalance's weights forward until the next one.
 
-    Monthly momentum selects names once a month, but the engine requires a
-    weight for every trading day. On any date, the held weights are those set by
-    the most recent rebalance on or before it.
+    Monthly momentum selects names once a month; the engine needs a weight for
+    every trading day. On any date the held weights are those set by the most
+    recent rebalance on or before it.
 
-    Each rebalance is treated as a COMPLETE portfolio snapshot: a name absent
-    from a given rebalance is assigned an explicit 0.0 on that date, so dropping
-    out of the selection closes the position. Carrying weights forward per
-    ticker instead would leave exited names held indefinitely and let gross
-    exposure accumulate with every rebalance.
+    Each rebalance is a COMPLETE portfolio snapshot: a name absent from one gets
+    an explicit 0.0 that date, so dropping out of the selection closes the
+    position. Carrying weights forward per ticker instead would hold exited
+    names indefinitely and let gross exposure accumulate at every rebalance.
 
-    Implemented as an as-of join, the same primitive used to match a quote to
-    the trade that followed it. It looks backward only, so a future rebalance
-    can never be carried into the past.
+    Implemented as a backward as-of join, so a future rebalance can never be
+    carried into the past.
     """
     if weights.is_empty():
         return pl.DataFrame(schema=W_SCHEMA)
@@ -156,8 +149,7 @@ def hold_until_next_rebalance(
 
     with warnings.catch_warnings():
         # Polars cannot verify sortedness when `by` groups are used, and warns.
-        # Both frames ARE sorted by (ticker, ts) two lines above, so the warning
-        # is noise. Suppressed narrowly rather than globally.
+        # Both frames ARE sorted by (ticker, ts), so the warning is noise.
         warnings.filterwarnings("ignore", message="Sortedness of columns")
         out = spine.join_asof(
             weights.sort(["ticker", "ts"]),
