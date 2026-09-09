@@ -26,6 +26,7 @@ from falsify.backtest.portfolio import (
     hold_until_next_rebalance,
     month_end_dates,
 )
+from falsify.data.quality import drop_suspect_tickers
 from falsify.features.library import add_momentum_12_1
 
 COST_BPS = 10.0
@@ -111,6 +112,13 @@ def main() -> None:
         f"universe: {universe['ticker'].n_unique()} tickers, "
         f"{len(universe):,} rows, {universe['ts'].min()} to {universe['ts'].max()}"
     )
+
+    universe, excluded = drop_suspect_tickers(universe)
+    if not excluded.is_empty():
+        print(f"\nexcluded {excluded.height} ticker(s) failing the data-quality gate:")
+        for r in excluded.iter_rows(named=True):
+            print(f"  {r['ticker']:<6} {r['reason']:<14} {r['detail']}")
+        print(f"universe after exclusions: {universe['ticker'].n_unique()} tickers")
 
     weights = momentum_weights(universe)
     if weights.is_empty():
