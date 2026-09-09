@@ -1,19 +1,19 @@
 """Return accounting for a weighted portfolio.
 
-    Weights decided using data up to and INCLUDING day t are applied to the
+The module enforces a single timing rule:
+
+    Weights decided using data up to and including day t are applied to the
     return from day t to day t+1.
 
-That sentence is the entire specification. Everything below is detail.
+That rule is the entire specification; everything else here is detail.
 
-Design note:
-The engine knows nothing about momentum, or signals, or ranking. It takes
-weights someone else chose and accounts for them honestly. That separation is
-why adding five more anomalies in Module 6 does not require re-auditing the
-timing logic five more times.
+The engine is deliberately ignorant of signals, ranking and factor definitions.
+It receives weights chosen elsewhere and accounts for them. Holding that
+boundary means new strategies can be added without re-auditing the timing logic.
 
-Rebalancing frequency is deliberately not an engine concern. To
-rebalance monthly, portfolio.py emits weights on month-ends and forward-fills
-them. The engine just sees a weight for every day.
+Rebalancing frequency is likewise not an engine concern: portfolio.py emits
+weights on rebalance dates and carries them forward, so the engine sees a weight
+for every day.
 """
 from __future__ import annotations
 
@@ -31,11 +31,11 @@ class BacktestConfig:
 
 @dataclass
 class BacktestResult:
-    """Deliberately NOT a scalar Sharpe.
+    """Full backtest output: the daily return series, not a summary statistic.
 
-    Module 3 needs the full daily return series for walk-forward splits,
-    deflated Sharpe and FDR. Returning a number here would force a rewrite in
-    three weeks. Metrics are computed FROM this object, never stored in it.
+    Walk-forward splits, deflated Sharpe and multiple-testing correction all
+    require the complete return series, so it is returned intact. Metrics are
+    computed from this object rather than stored on it.
     """
     returns: pl.DataFrame            # ts, gross_ret, cost, ret   (ret = net)
     weights: pl.DataFrame            # ts, ticker, w
@@ -60,12 +60,11 @@ def forward_returns(prices: pl.DataFrame) -> pl.DataFrame:
         prices: long frame with columns (ticker, ts, close).
 
     Returns:
-        The frame sorted by (ticker, ts) with `fwd_ret` appended. The last
-        observation per ticker has a null fwd_ret; leave it null here, the
-        engine drops it.
+        The frame sorted by (ticker, ts) with `fwd_ret` appended. The final
+        observation per ticker has a null fwd_ret, which run_backtest drops.
 
-    This is the ONLY place a negative shift is allowed to appear in this
-    codebase. Confining it to one function keeps lookahead bias auditable.
+    This is the only forward-looking shift in the codebase. Confining it to one
+    function is what makes the absence of lookahead bias auditable.
     """
     # sort first: a shift is POSITIONAL, so "the next row" only means "tomorrow"
     # if the rows are already in date order within each ticker.
@@ -85,10 +84,9 @@ def compute_turnover(weights: pl.DataFrame) -> pl.DataFrame:
     Treat a ticker absent on the previous date as w = 0. On the first date,
     every position is new, so turnover is the gross exposure.
 
-    Note this is the un-halved convention (going from flat to 100% long one
-    name is turnover 1.0, not 0.5) and it ignores weight drift between
-    rebalances. Both are simplifications. Document them in the README rather
-    than pretending they are not there.
+    Two simplifications, both disclosed in the README: this is the un-halved
+    convention (moving from flat to 100% long a single name is turnover 1.0,
+    not 0.5), and weight drift between rebalances is ignored.
 
     Args:
         weights: long frame (ts, ticker, w).
@@ -110,8 +108,9 @@ def compute_turnover(weights: pl.DataFrame) -> pl.DataFrame:
         .with_columns(pl.col("w").fill_null(0.0))       # not held that day = 0
         .sort(["ticker", "ts"])
         .with_columns(
-            # how much this position moved since yesterday. fill_null(0.0)
-            # handles the first date: the book starts flat, so all is new.
+            # Size of the change in this position since the previous date.
+            # fill_null(0.0) covers the first date: the book starts flat, so
+            # every position is new.
             (pl.col("w") - pl.col("w").shift(1).over("ticker").fill_null(0.0))
             .abs().alias("dw")
         )
@@ -136,34 +135,29 @@ def run_backtest(
     Returns:
         BacktestResult.
 
-    The steps, in order:
-      1. fwd_ret = forward_returns(prices).
-      2. Join weights onto fwd_ret on (ts, ticker). Left-join FROM the weights
-         so a weight with no matching price is loud, not silently dropped.
-      3. gross_ret_t = sum_i w_{i,t} * fwd_ret_{i,t}, grouped by ts.
-      4. cost_t = turnover_t * config.cost_bps / 10_000.
-      5. ret_t = gross_ret_t - cost_t.
-      6. Drop the final date, which has no forward return. Do NOT let it become
-         a silent 0.0 — that quietly biases every metric downstream.
-      7. Sort by ts. Return the full BacktestResult.
+    Each date's gross return is the weighted sum of that date's forward returns.
+    Costs are turnover * cost_bps / 10_000, subtracted to give the net return.
 
-    Dates present in prices but absent from weights are flat: ret 0.0, and they
-    still appear in the output series. A backtest that silently skips its
-    out-of-position days reports the Sharpe of a strategy nobody ran.
+    The final date carries no forward return and is dropped rather than recorded
+    as 0.0, since a silent zero would bias every downstream mean and volatility.
+
+    Dates present in prices but absent from weights are reported flat at 0.0
+    rather than omitted. Omitting out-of-position days would report the Sharpe
+    of a strategy that was never actually run.
     """
     config = config or BacktestConfig()
     fwd = forward_returns(prices)
 
-    # THE DATE SPINE. Every trading day except the last, which has no tomorrow.
-    # Building the output from this (rather than from the weights) is what makes
-    # out-of-position days show up as 0.0 instead of vanishing.
+    # Date spine: every trading day except the last, which has no forward
+    # return. Driving the output from the spine rather than from the weights is
+    # what keeps out-of-position days in the series at 0.0 instead of dropping.
     all_dates = fwd["ts"].unique().sort()
     spine = pl.DataFrame({"ts": all_dates.head(len(all_dates) - 1)})
 
     w = weights if not weights.is_empty() else pl.DataFrame(schema=_W_SCHEMA)
 
-    # THE ONE LINE THAT MATTERS: today's weight meets today's FORWARD return.
-    # w is decided from data through ts; fwd_ret is what follows it.
+    # The timing rule, enforced: each date's weight is paired with that date's
+    # forward return. w is decided from data through ts; fwd_ret is what follows.
     gross = (
         w.join(fwd.select(["ts", "ticker", "fwd_ret"]), on=["ts", "ticker"], how="left")
         .with_columns((pl.col("w") * pl.col("fwd_ret")).alias("contrib"))

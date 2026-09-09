@@ -1,8 +1,8 @@
 """Database access: daily_bars -> long-format Polars frames.
 
-Nothing here makes a methodology decision. It reads rows out of daily_bars and
-hands back a long-format frame in exactly the shape features/library.py expects:
-one row per (ticker, ts), sorted by (ticker, ts).
+No methodology decisions are made here. Rows are read from daily_bars and
+returned in the shape features/library.py expects: one row per (ticker, ts),
+sorted by (ticker, ts).
 """
 from __future__ import annotations
 
@@ -75,13 +75,12 @@ def load_prices(
     end: dt.date | str | None = None,
     dsn: str | None = None,
 ) -> pl.DataFrame:
-    """Just (ticker, ts, close) — the minimum the engine needs."""
+    """(ticker, ts, close) only: the minimum the engine requires."""
     return load_panel(tickers, start, end, dsn).select(["ticker", "ts", "close"])
 
 
 def coverage(dsn: str | None = None) -> pl.DataFrame:
-    """Sanity-check query: rows and date span per ticker. Use this to eyeball
-    that the ingest covered the expected range."""
+    """Row count and date span per ticker, for verifying ingest coverage."""
     sql = """
         SELECT ticker, count(*) AS n_rows, min(ts) AS first_ts, max(ts) AS last_ts
         FROM daily_bars GROUP BY ticker ORDER BY ticker

@@ -1,4 +1,4 @@
-"""Feature library — Module 1's real deliverable.
+"""Feature library.
 
 Every function takes a long-format Polars frame (ticker, ts, close, ...)
 sorted by (ticker, ts) and returns the frame with ONE new column appended.
@@ -73,7 +73,7 @@ def add_zscore(df: pl.DataFrame, source_col: str, window: int = 252) -> pl.DataF
 
 
 def build_standard_features(df: pl.DataFrame) -> pl.DataFrame:
-    """The default Module 1 feature set, chained."""
+    """The default feature set, chained."""
     df = add_returns(df, 1)
     df = add_returns(df, 5)
     df = add_returns(df, 21)

@@ -1,19 +1,14 @@
-"""Module 2, the engine.
+"""Engine tests.
 
 Two of these bracket the timing rule from both sides:
 
     test_oracle_signal_prints_an_absurd_sharpe   (positive control)
     test_alternating_series_strategy_must_lose   (negative control)
 
-They bracket the off-by-one from both sides. The positive control proves the
-engine can express a profitable strategy at all, so that a flat result elsewhere
-means "correctly earned nothing" rather than "silently broken". The negative
-control establishes the engine does not credit tomorrow's return today.
-
-The negative control is the strongest correctness guarantee in this
-module.
-
-Run:  pytest tests/test_engine.py -v
+The positive control establishes that the engine can express a profitable
+strategy at all, so that a flat result elsewhere means "correctly earned
+nothing" rather than "silently broken". The negative control establishes that
+the engine does not credit tomorrow's return today.
 """
 from __future__ import annotations
 
@@ -82,9 +77,9 @@ def test_forward_returns_looks_exactly_one_day_ahead():
 
 
 def test_forward_returns_does_not_leak_across_tickers():
-    """The classic long-format bug: ticker A's final row grabbing ticker B's
-    first row. tests/test_features.py already guards the positive shift; this
-    is the same trap on the negative one."""
+    """The classic long-format bug: ticker A's final row reaching into ticker
+    B's first row. tests/test_features.py guards the backward shift; this is the
+    same failure mode on the forward one."""
     prices = _prices({"AAA": [100.0, 200.0], "BBB": [50.0, 25.0]})
     out = forward_returns(prices)
 
@@ -150,8 +145,9 @@ def test_single_ticker_known_path():
 
 
 def test_final_date_is_dropped_not_zeroed():
-    """The last date has no forward return. Dropping it and calling it 0.0 are
-    NOT the same thing: a silent zero drags every downstream mean and vol."""
+    """The final date has no forward return. Dropping it and recording it as
+    0.0 are not equivalent: a silent zero drags every downstream mean and
+    volatility."""
     prices = _prices({"AAA": [100.0, 110.0, 121.0, 133.1]})
     ds = _dates(4)
     w = _weights([(d, "AAA", 1.0) for d in ds])
@@ -162,8 +158,8 @@ def test_final_date_is_dropped_not_zeroed():
 
 
 def test_dates_without_weights_are_flat_but_still_reported():
-    """Out-of-position days belong in the series. A backtest that quietly skips
-    them reports the Sharpe of a strategy nobody ran."""
+    """Out-of-position days belong in the series. Omitting them would report
+    the Sharpe of a strategy that was never actually run."""
     prices = _prices({"AAA": [100.0, 110.0, 121.0, 133.1]})
     ds = _dates(4)
     w = _weights([(ds[2], "AAA", 1.0)])          # only in the market on day 2
@@ -193,19 +189,19 @@ def test_zero_cost_config_is_the_default():
 
 
 # --------------------------------------------------------------------------
-# THE TWO THAT MATTER
+# Timing controls
 # --------------------------------------------------------------------------
 
 def test_oracle_signal_prints_an_absurd_sharpe():
-    """POSITIVE CONTROL.
+    """Positive control.
 
-    Signal at t is literally the return from t to t+1. Perfect foresight. A
-    correct engine hands that strategy an obscene Sharpe.
+    The signal at t is the return from t to t+1: perfect foresight. A correct
+    engine awards that strategy an enormous Sharpe.
 
-    This test is not here because perfect foresight is interesting. It is here
-    so that a 0.0 result in the negative control means "the engine correctly
-    earned nothing" rather than "the engine is dead and returns zero for
-    everything". Without a positive control, a flat result proves nothing.
+    Its purpose is not that perfect foresight is interesting. It establishes
+    that a 0.0 result in the negative control means the engine correctly earned
+    nothing, rather than that the engine returns zero for everything. Without a
+    positive control, a flat result proves nothing.
     """
     rng = random.Random(42)
     n = 300
@@ -228,7 +224,7 @@ def test_oracle_signal_prints_an_absurd_sharpe():
 
 
 def test_alternating_series_strategy_must_lose():
-    """NEGATIVE CONTROL. This is the one.
+    """Negative control.
 
     AAA alternates +10%, -10%, +10%, -10% forever. BBB never moves.
 
@@ -240,11 +236,10 @@ def test_alternating_series_strategy_must_lose():
     top. Every time it goes long AAA, AAA's very next move is -10%. It must
     bleed out.
 
-    If the engine has an off-by-one and applies today's weights to today's
-    already-realised return, the same strategy compounds at +10% on half the
-    days and the sign of the result FLIPS from catastrophic to spectacular.
-    No amount of squinting at a Sharpe ratio would catch that. This test does,
-    on the first run, in one assertion.
+    If the engine has an off-by-one and applies each date's weights to that
+    date's already-realised return, the same strategy compounds at +10% on half
+    the days and the sign of the result flips from catastrophic to spectacular.
+    Inspecting a Sharpe ratio would not reveal that; one assertion here does.
     """
     n = 41
     path, p = [100.0], 100.0
@@ -284,10 +279,10 @@ def test_alternating_series_strategy_must_lose():
 def test_negative_control_is_actually_discriminating():
     """Guards the guard.
 
-    Deliberately reproduce the off-by-one (apply each day's weights to that
-    day's already-realised return) and confirm the same setup turns strongly
-    POSITIVE. If this ever fails, the negative control above has stopped being
-    able to catch anything and is giving false comfort.
+    Deliberately reproduces the off-by-one, applying each date's weights to that
+    date's already-realised return, and confirms the same setup turns strongly
+    positive. Were this to fail, the negative control above would no longer
+    discriminate and would be giving false assurance.
     """
     n = 41
     path, p = [100.0], 100.0
@@ -313,9 +308,9 @@ def test_negative_control_is_actually_discriminating():
     )
 
 
-def test_result_object_carries_what_module_3_needs():
-    """Module 3 wants the daily series, the weight history and the config.
-    Locking the shape now avoids a rewrite in three weeks."""
+def test_result_object_carries_the_full_return_series():
+    """The statistics layer consumes the daily series, the weight history and
+    the config, so the shape of the result object is pinned by a test."""
     prices = _prices({"AAA": [100.0, 110.0, 121.0]})
     ds = _dates(3)
     w = _weights([(d, "AAA", 1.0) for d in ds])

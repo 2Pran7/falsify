@@ -1,7 +1,7 @@
 """Feature library tests on synthetic data with hand-computable answers.
 
 Expected values are derived by hand rather than captured from the
-implementation, so the tests constrain the features, not describe them.
+implementation, so the tests constrain the features rather than describe them.
 """
 import datetime as dt
 
@@ -41,8 +41,8 @@ def test_returns_exact():
 
 
 def test_no_cross_ticker_leakage():
-    """First return of the second ticker must be null, not computed off the
-    previous ticker's last price — the classic long-format bug."""
+    """The first return of the second ticker must be null, not computed from
+    the previous ticker's last price: the classic long-format bug."""
     df = add_returns(make_synthetic(), 1).sort(["ticker", "ts"])
     first_bbb = df.filter(pl.col("ticker") == "BBB").head(1)
     assert first_bbb["ret_1d"][0] is None

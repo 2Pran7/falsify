@@ -1,8 +1,8 @@
 """Minimal, rate-limited Polygon.io client.
 
-One method matters for Module 1: daily aggregates for a ticker over a date
-range, split/dividend adjusted. One API call covers 5 years of daily bars
-(limit=50000 >> ~1260 trading days), so the whole S&P 500 is ~503 calls.
+A single method covers the ingest requirement: daily aggregates for a ticker
+over a date range, split/dividend adjusted. One API call covers 5 years of daily
+bars (limit=50000 >> ~1260 trading days), so the whole S&P 500 is ~503 calls.
 """
 from __future__ import annotations
 

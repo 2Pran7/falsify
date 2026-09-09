@@ -1,18 +1,15 @@
-"""Module 2's closing test: does the engine reproduce a result we can verify
-independently, on real market data?
+"""Reconciliation of the engine against an independently computed result.
 
-Two tests, deliberately:
+Two layers:
 
-  1. A synthetic reconciliation that ALWAYS runs. It proves the engine's
-     buy-and-hold output equals a direct cumprod of the same prices.
+  1. A synthetic reconciliation that always runs, establishing that the engine's
+     buy-and-hold output equals a direct compounding of the same prices.
   2. The same reconciliation against real SPY bars from the database. Skipped
-     automatically if Docker is down or SPY has not been ingested, so the suite
-     stays green on a fresh clone.
+     automatically when the database is unreachable or SPY has not been
+     ingested, so the suite stays green on a fresh clone.
 
-Note what this does NOT do: compare against a number someone remembered. It
-recomputes the answer a second, independent way and demands they agree. A
-stored constant would go stale as the data window is extended;
-an independent recomputation does not.
+The reference value is recomputed rather than hardcoded. A stored constant would
+go stale as the data window is extended; an independent recomputation does not.
 """
 from __future__ import annotations
 
@@ -27,10 +24,10 @@ from falsify.backtest.portfolio import fixed_weights
 
 
 def _direct_buy_and_hold(prices: pl.DataFrame) -> float:
-    """The answer computed WITHOUT the engine: last close over first close.
+    """The result computed without the engine: last close over first close.
 
     Buy at the first close, sell at the last. No weights, no joins, no shifts.
-    If the engine disagrees with this, the engine is wrong.
+    Disagreement with this value means the engine is wrong.
     """
     p = prices.sort("ts")["close"]
     return float(p[-1] / p[0] - 1.0)
@@ -62,8 +59,8 @@ def test_engine_matches_direct_buy_and_hold_synthetic():
 
 
 def test_costs_only_reduce_returns():
-    """Charging for trading cannot increase returns. Catches a sign flip
-    on the cost term, which zero-cost tests would never notice."""
+    """Charging for trading cannot increase returns. Catches a sign flip on the
+    cost term, which zero-cost tests would not detect."""
     ds = [dt.date(2024, 1, 1) + dt.timedelta(days=i) for i in range(50)]
     path = [100.0 * (1.001 ** i) for i in range(50)]
     prices = pl.DataFrame(
@@ -107,9 +104,9 @@ def test_engine_reproduces_real_spy_buy_and_hold():
 
 @needs_spy
 def test_real_spy_volatility_is_plausible():
-    """A band, not a point. SPY's annualised vol has sat roughly between 10%
-    and 25% for decades. If the engine reports 80%, something is wrong no
-    matter how good the cumulative return looks."""
+    """A band, not a point. SPY's annualised volatility has sat roughly between
+    10% and 25% for decades. A reported 80% indicates a fault regardless of how
+    plausible the cumulative return looks."""
     res = run_backtest(spy, fixed_weights(spy["ts"], "SPY"))
     vol = m.ann_vol(res.ret)
     assert 0.05 < vol < 0.45, f"SPY annualised vol came out at {vol:.1%}"
@@ -118,8 +115,8 @@ def test_real_spy_volatility_is_plausible():
 @needs_spy
 def test_real_spy_has_no_gaps_in_the_return_series():
     """Every trading day except the last must appear exactly once. A missing
-    day means a silent join failure, which is how a backtest ends up reporting
-    the Sharpe of a strategy that was not always invested."""
+    day indicates a silent join failure, which would report the Sharpe of a
+    strategy that was not continuously invested."""
     res = run_backtest(spy, fixed_weights(spy["ts"], "SPY"))
     assert len(res.returns) == spy["ts"].n_unique() - 1
     assert res.returns["ts"].n_unique() == len(res.returns)

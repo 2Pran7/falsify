@@ -3,15 +3,15 @@
 Every function takes `returns`: a pl.Series of daily SIMPLE returns (not log
 returns), in chronological order. 0.01 means +1% that day.
 
-Conventions, fixed here so the tests and Module 3 agree. Do not change them
-without changing the tests:
+Conventions, pinned so that these metrics and the statistics layer above them
+agree. Changing any of them requires changing the tests:
   - 252 trading days per year.
   - Standard deviation uses ddof=1 (sample), which is Polars' default.
   - max_drawdown is returned NEGATIVE (a 50% drawdown is -0.5).
   - Nothing here annualises by compounding except cagr.
 
-Module 3 bolts deflated Sharpe and FDR on top of these, so keep them pure:
-no printing, no plotting, no DB.
+Deflated Sharpe and multiple-testing correction are layered on top of these,
+so the functions stay pure: no printing, no plotting, no database access.
 """
 from __future__ import annotations
 
@@ -66,9 +66,9 @@ def sharpe(
 
     where excess = returns - rf / periods_per_year (rf is an ANNUAL rate).
 
-    Zero volatility means the ratio is undefined: return float('nan'), do not
-    raise and do not return 0.0. A silent 0.0 here would let a degenerate
-    strategy look merely mediocre instead of broken.
+    Zero volatility makes the ratio undefined, so the result is float('nan')
+    rather than 0.0. A silent zero would let a degenerate strategy read as
+    merely mediocre instead of broken.
     """
     excess = returns - rf / periods_per_year
     sd = excess.std(ddof=1)
@@ -82,17 +82,16 @@ def sharpe(
 def max_drawdown(returns: pl.Series) -> float:
     """Worst peak-to-trough decline of the equity curve, as a negative number.
 
-    Build the equity curve as cumprod(1 + r) with a leading 1.0. The leading 1.0
-    matters: without it, a series that only ever falls reports a drawdown of 0,
-    because the first observation becomes its own peak. That is a real bug people
-    ship, so the test checks for it.
+    The equity curve is cumprod(1 + r) with a leading 1.0. Without that leading
+    value a series that only falls reports a drawdown of 0, because its first
+    observation becomes its own high-water mark.
 
     Returns 0.0 for a series that never declines.
     """
     if len(returns) == 0:
         return float("nan")
-    # Prepend a 0% day so the curve starts at exactly 1.0 (starting capital
-    # is the first high-water mark, not the balance after day one).
+    # Prepend a 0% day so the curve starts at 1.0: starting capital is the
+    # first high-water mark, not the balance after day one.
     r = pl.concat([pl.Series("r", [0.0]), returns.rename("r").cast(pl.Float64)])
     equity = (r + 1.0).cum_prod()
     drawdown = equity / equity.cum_max() - 1.0
@@ -101,8 +100,9 @@ def max_drawdown(returns: pl.Series) -> float:
 
 
 def summary(returns: pl.Series) -> dict[str, float]:
-    """All of the above in one dict. Keys, exactly:
-    total_return, cagr, ann_vol, sharpe, max_drawdown, n_days.
+    """Every metric in one dict.
+
+    Keys: total_return, cagr, ann_vol, sharpe, max_drawdown, n_days.
     """
     return {
         "total_return": total_return(returns),

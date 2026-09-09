@@ -1,4 +1,4 @@
-"""Run the full Module 1 ingest: fetch universe, snapshot it, pull 5yr bars.
+"""Ingest entry point: fetch the universe, snapshot it, pull 5yr daily bars.
 
 Usage:  python scripts/run_ingest.py            # full S&P 500
         python scripts/run_ingest.py AAPL MSFT  # specific tickers (smoke test)

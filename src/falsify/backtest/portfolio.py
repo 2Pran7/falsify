@@ -1,15 +1,15 @@
 """Signal -> weights. The strategy layer.
 
-The engine knows nothing about ranking, deciles or rebalancing. That all lives
-here, which is why adding a new anomaly in Module 6 means writing a new signal
-and reusing everything else untouched.
+The engine knows nothing about ranking, deciles or rebalancing. All of that
+lives here, so adding a new anomaly means writing a new signal and reusing the
+rest of the pipeline unchanged.
 
 Input everywhere is a long frame (ts, ticker, sig). Output everywhere is a long
 frame (ts, ticker, w) in exactly the shape run_backtest expects.
 
-Methodology note: nothing here shifts anything in time. Signals passed in
-must already be computed from data up to and including ts (which is what
-features/library.py guarantees). The engine does the shift. One place, once.
+Methodology note: nothing here shifts anything in time. Signals must already be
+computed from data up to and including ts, which features/library.py guarantees.
+The engine applies the shift, in one place, once.
 """
 from __future__ import annotations
 
@@ -38,13 +38,13 @@ def decile_weights(
         Long frame (ts, ticker, w). Dates and tickers with a null signal simply
         do not appear.
 
-    Null handling is the thing to get right here, not the ranking. mom_12_1
-    needs 252 days of history, so every ticker is null for its first trading
-    year. If nulls silently ranked as zero they would pile into the bottom
-    bucket, producing a short book of names too young to score,
-    which is a real portfolio that produces plausible-looking numbers and means
-    nothing. So nulls are dropped BEFORE ranking, and the bucket size is
-    computed from how many names actually scored that day.
+    Null handling matters more here than the ranking. mom_12_1 requires 252
+    days of history, so every ticker is null for its first trading year. If
+    nulls ranked as zero they would collect in the bottom bucket, producing a
+    short book of names that are simply too young to score: a real portfolio
+    with plausible-looking returns and no meaning. Nulls are therefore dropped
+    before ranking, and bucket size is computed from the names that actually
+    scored on that date.
     """
     s = signal.drop_nulls("sig")
     if s.is_empty():
@@ -93,8 +93,7 @@ def decile_weights(
 def fixed_weights(dates: pl.Series, ticker: str, w: float = 1.0) -> pl.DataFrame:
     """Hold one ticker at a constant weight on every given date.
 
-    This is what the SPY buy-and-hold smoke test uses. Trivial, but it belongs
-    here rather than being hand-rolled inside a test.
+    Used by the buy-and-hold reconciliation test.
     """
     ds = dates.unique().sort()
     return pl.DataFrame(
@@ -105,8 +104,8 @@ def fixed_weights(dates: pl.Series, ticker: str, w: float = 1.0) -> pl.DataFrame
 def month_end_dates(dates: pl.Series) -> pl.Series:
     """The last TRADING day of each month present in `dates`.
 
-    Not the calendar month-end: 31 August might be a Sunday. Rebalancing on a
-    date the market was shut is a classic way to quietly lose a day of returns.
+    Not the calendar month-end: 31 August may fall on a Sunday. Rebalancing on
+    a date the market was closed silently loses a day of returns.
     """
     df = pl.DataFrame({"ts": dates.unique().sort()})
     return (
@@ -122,21 +121,36 @@ def hold_until_next_rebalance(
 ) -> pl.DataFrame:
     """Carry each rebalance's weights forward until the next one.
 
-    Monthly momentum picks its names once a month, but the engine wants a
-    weight for every trading day. On any date, the held weights are
-    whatever the most recent rebalance on or before that date decided.
+    Monthly momentum selects names once a month, but the engine requires a
+    weight for every trading day. On any date, the held weights are those set by
+    the most recent rebalance on or before it.
 
-    Uses an as-of join, which is the same primitive exchanges use to match a
-    quote to the trade that followed it. Crucially it looks BACKWARD only, so
-    it can never carry a future rebalance's decision into the past.
+    Each rebalance is treated as a COMPLETE portfolio snapshot: a name absent
+    from a given rebalance is assigned an explicit 0.0 on that date, so dropping
+    out of the selection closes the position. Carrying weights forward per
+    ticker instead would leave exited names held indefinitely and let gross
+    exposure accumulate with every rebalance.
+
+    Implemented as an as-of join, the same primitive used to match a quote to
+    the trade that followed it. It looks backward only, so a future rebalance
+    can never be carried into the past.
     """
     if weights.is_empty():
         return pl.DataFrame(schema=W_SCHEMA)
 
-    tickers = weights["ticker"].unique().sort()
+    tickers = pl.DataFrame({"ticker": weights["ticker"].unique().sort()})
+
+    # Complete every rebalance date into a full snapshot across all tickers.
+    weights = (
+        pl.DataFrame({"ts": weights["ts"].unique().sort()})
+        .join(tickers, how="cross")
+        .join(weights, on=["ts", "ticker"], how="left")
+        .with_columns(pl.col("w").fill_null(0.0))
+    )
+
     spine = (
         pl.DataFrame({"ts": all_dates.unique().sort()})
-        .join(pl.DataFrame({"ticker": tickers}), how="cross")
+        .join(tickers, how="cross")
         .sort(["ticker", "ts"])
     )
 

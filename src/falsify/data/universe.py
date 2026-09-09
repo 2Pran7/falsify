@@ -8,7 +8,7 @@ because scraping breaks whenever the page layout or served variant changes
 HONEST LIMITATION (document, don't hide): this is the CURRENT constituent
 list, not point-in-time historical membership. Backtests on today's members
 overstate returns (survivorship bias) — dead/dropped companies are missing.
-Module 3's audit quantifies this; the methodology post discloses it.
+The survivorship audit quantifies this; the methodology write-up discloses it.
 """
 from __future__ import annotations
 
