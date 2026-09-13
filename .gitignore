@@ -30,3 +30,4 @@ node_modules/
 # Env variants
 .env.local
 .env.*.local
+.cache/

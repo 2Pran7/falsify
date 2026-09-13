@@ -21,6 +21,13 @@ Three design decisions worth being able to defend:
    look for it, so this script looks for it and exits non-zero rather than
    printing. `--force` overrides, and says so loudly in the output.
 
+   The gate distinguishes the kinds of missing day rather than counting them,
+   because they do not mean the same thing. Prices that STOP while a name is
+   still an index member are a delisting: expected, unfixable, and the reason
+   the gap is a lower bound. Prices that START late are the ingest window. A
+   hole in the MIDDLE is a defect. Only the last kind, and a total absence of
+   prices, block the run.
+
 2. **The quality gate runs ONCE, on the combined universe, before the split.**
    Running it separately per universe could exclude different tickers from each
    run, and the measured gap would then be part survivorship and part
@@ -61,6 +68,58 @@ from falsify.data.quality import drop_suspect_tickers
 from falsify.stats.survivorship import coverage_report, survivorship_gap
 
 DEFAULT_SINCE = dt.date(2024, 9, 1)
+
+# A member-day with no price is not one thing. Classified against the ticker's
+# own first and last priced day:
+#   leading   membership starts before the price history does. The ingest
+#             window, not a defect: the free Polygon tier goes back two years
+#             from the day the fetch ran, and two ingests run a week apart give
+#             two different windows.
+#   trailing  prices stop while the name is still an index member. A real
+#             delisting. Expected, and it is exactly Shumway's missing piece.
+#   interior  a hole between two priced days. Nothing legitimate produces this
+#             at scale: suspect a failed fetch or a ticker splice.
+# Only `interior` and a total absence of prices block the run. Tolerating a few
+# interior days absorbs genuine trading halts without waving through a gap.
+INTERIOR_TOLERANCE_DAYS = 5
+DELISTING_MIN_DAYS = 1
+TOP_N = 8
+
+
+def _classify_missing(membership: pl.DataFrame, universe: pl.DataFrame) -> pl.DataFrame:
+    """Member-days with no price, labelled leading / trailing / interior.
+
+    Returns a frame (ticker, kind, days, last_px). `coverage_report` counts
+    missing days; this says which KIND they are, which is what decides whether
+    the run is safe to trust.
+    """
+    mem = membership.select(["ts", "ticker"]).unique()
+    px = universe.select(["ts", "ticker"]).unique()
+    span = px.group_by("ticker").agg(
+        pl.col("ts").min().alias("first_px"), pl.col("ts").max().alias("last_px")
+    )
+    gaps = mem.join(px, on=["ts", "ticker"], how="anti").join(span, on="ticker", how="left")
+    if gaps.is_empty():
+        return pl.DataFrame(
+            schema={"ticker": pl.Utf8, "kind": pl.Utf8, "days": pl.UInt32, "last_px": pl.Date}
+        )
+    return (
+        gaps.with_columns(
+            pl.when(pl.col("first_px").is_null()).then(pl.lit("none"))
+            .when(pl.col("ts") < pl.col("first_px")).then(pl.lit("leading"))
+            .when(pl.col("ts") > pl.col("last_px")).then(pl.lit("trailing"))
+            .otherwise(pl.lit("interior"))
+            .alias("kind")
+        )
+        .group_by(["ticker", "kind"])
+        .agg(pl.len().alias("days").cast(pl.UInt32), pl.col("last_px").first())
+        .sort(["days", "ticker"], descending=[True, False])
+    )
+
+
+def _tickers_with(kinds: pl.DataFrame, kind: str, min_days: int) -> pl.DataFrame:
+    """Rows of one kind at or above a day threshold, worst first."""
+    return kinds.filter((pl.col("kind") == kind) & (pl.col("days") >= min_days))
 
 
 def _run(panel: pl.DataFrame, membership: pl.DataFrame | None, label: str):
@@ -118,27 +177,46 @@ def main() -> None:
 
     # --- coverage gate ------------------------------------------------------
     cov = coverage_report(membership, universe)
-    never = cov.filter(pl.col("n_price_days") == 0)
-    partial = cov.filter((pl.col("n_price_days") > 0) & (pl.col("missing_days") > 0))
+    kinds = _classify_missing(membership, universe)
+    never = cov.filter(pl.col("n_price_days") == 0)["ticker"].to_list()
+    interior = _tickers_with(kinds, "interior", INTERIOR_TOLERANCE_DAYS + 1)
+    trailing = _tickers_with(kinds, "trailing", DELISTING_MIN_DAYS)
+    leading = _tickers_with(kinds, "leading", DELISTING_MIN_DAYS)
 
     print(f"\nCOVERAGE: {cov.height} point-in-time members checked")
-    print(f"  no prices at all:      {never.height}")
-    print(f"  partial price history: {partial.height}")
-    if not partial.is_empty():
-        print("  worst partial coverage:")
-        for r in partial.head(5).iter_rows(named=True):
-            print(
-                f"    {r['ticker']:<6} member {r['n_member_days']:>4}d, "
-                f"priced {r['n_price_days']:>4}d, missing {r['missing_days']:>4}d"
-            )
+    print(f"  fully covered:                 {cov.filter(pl.col('missing_days') == 0).height}")
+    print(f"  no prices at all:              {len(never)}   <- blocks")
+    print(f"  interior holes >{INTERIOR_TOLERANCE_DAYS}d:            {interior.height}   <- blocks")
+    print(f"  price history ends early:      {trailing.height}   (delistings, expected)")
+    print(f"  price history starts late:     {leading.height}   (ingest window, expected)")
 
-    if not never.is_empty():
-        missing = never["ticker"].to_list()
-        print(f"\n  {len(missing)} member(s) have no ingested prices:")
-        print("    " + ", ".join(missing[:20]) + (" ..." if len(missing) > 20 else ""))
-        print("\n  Ingest them first, or the point-in-time run silently omits them")
-        print("  and the gap comes back smaller than the truth:")
-        print(f"    python scripts/run_ingest.py {' '.join(missing[:8])} ...")
+    if not trailing.is_empty():
+        print(f"\n  Names whose prices stop while still index members (top {TOP_N}):")
+        for r in trailing.head(TOP_N).iter_rows(named=True):
+            print(f"    {r['ticker']:<6} {r['days']:>4}d of membership unpriced after {r['last_px']}")
+        print(
+            "  This is Shumway's missing piece, visible in the data: an acquired\n"
+            "  company stops having prices and its delisting return is unrecoverable.\n"
+            "  It is why the measured gap is a LOWER BOUND, not an estimate."
+        )
+
+    blocked = bool(never) or not interior.is_empty()
+
+    if never:
+        print(f"\n  {len(never)} member(s) have no ingested prices at all:")
+        print("    " + ", ".join(never[:20]) + (" ..." if len(never) > 20 else ""))
+        print("  Ingest them, or the point-in-time run silently omits them and the")
+        print("  gap comes back smaller than the truth:")
+        print(f"    python scripts/run_ingest.py {' '.join(never[:10])}")
+
+    if not interior.is_empty():
+        print(f"\n  {interior.height} member(s) have holes INSIDE their price history:")
+        for r in interior.head(TOP_N).iter_rows(named=True):
+            print(f"    {r['ticker']:<6} {r['days']:>4}d missing between first and last price")
+        print("  A hole in the middle is not a delisting. Suspect a failed fetch or a")
+        print("  ticker splice, and check data/quality.py before trusting this run.")
+
+    if blocked:
         if not args.force:
             raise SystemExit("\nRefusing to report a gap on incomplete coverage. --force overrides.")
         print("\n  --force: reporting anyway. THIS NUMBER UNDER-MEASURES THE BIAS.")
