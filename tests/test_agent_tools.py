@@ -384,9 +384,42 @@ def test_analyze_results_returns_the_honesty_table(with_feature):
     s, ph, fh = with_feature
     bh = T.run_backtest(s, fh)["handle"]
     out = T.analyze_results(s, bh)
-    for k in ("sharpe_per_period", "psr", "expected_max_sharpe", "deflated_sharpe",
-              "min_track_record_length", "n_trials_used"):
+    for k in ("sharpe_per_period", "prob_sharpe_above_zero",
+              "expected_max_sharpe_from_luck", "prob_beats_best_of_n_trials",
+              "min_track_record_length_days", "n_trials_used"):
         assert k in out
+
+
+def test_probabilities_are_named_as_probabilities(with_feature):
+    """Field names carry the units, because a name is all the reader gets.
+
+    On the first real run a key called `deflated_sharpe` was tabulated by the
+    model in the same column as an actual Sharpe: 0.65 raw beside 0.73
+    "deflated", which is impossible for a deflated ratio and perfectly ordinary
+    for a probability. The numbers were right and the interpretation was wrong,
+    and the name caused it.
+    """
+    s, ph, fh = with_feature
+    bh = T.run_backtest(s, fh)["handle"]
+    out = T.analyze_results(s, bh)
+    for k in ("prob_sharpe_above_zero", "prob_beats_best_of_n_trials"):
+        assert 0.0 <= out[k] <= 1.0
+    assert "deflated_sharpe" not in out, "a bare 'deflated_sharpe' key invites the unit error"
+    assert "probabilit" in out["units_note"].lower()
+
+
+def test_the_output_warns_that_the_trial_count_is_as_of_now(with_feature):
+    """The anti-cheat stops understating; it cannot stop analysing too early.
+
+    An agent that analyses backtest_1 and then runs two more has a first row
+    deflated for one trial when the honest count turned out to be three. The
+    guard cannot see the future, so the output says so and the runner
+    recomputes every row at the final count.
+    """
+    s, ph, fh = with_feature
+    bh = T.run_backtest(s, fh)["handle"]
+    note = T.analyze_results(s, bh)["n_trials_note"].lower()
+    assert "as of this call" in note
 
 
 def test_n_trials_defaults_to_what_the_session_observed(with_feature):
@@ -433,8 +466,8 @@ def test_more_trials_never_raises_the_deflated_sharpe(with_feature):
     """
     s, ph, fh = with_feature
     bh = T.run_backtest(s, fh)["handle"]
-    few = T.analyze_results(s, bh, n_trials=2)["deflated_sharpe"]
-    many = T.analyze_results(s, bh, n_trials=100)["deflated_sharpe"]
+    few = T.analyze_results(s, bh, n_trials=2)["prob_beats_best_of_n_trials"]
+    many = T.analyze_results(s, bh, n_trials=100)["prob_beats_best_of_n_trials"]
     assert many <= few
 
 

@@ -73,6 +73,27 @@ for how many strategies were tried, and the minimum track record length, which \
 says how much data would be needed before the Sharpe could be distinguished \
 from zero at all.
 
+The trial count used for deflation is taken at the moment you call \
+analyze_results. If you run more backtests afterwards, that earlier analysis is \
+deflated too generously and must not be reported. After your final backtest, \
+call analyze_results again on every backtest you intend to report, and quote \
+only those numbers.
+
+analyze_results returns probabilities, not Sharpe ratios. \
+prob_sharpe_above_zero and prob_beats_best_of_n_trials are both in [0,1]. \
+prob_beats_best_of_n_trials IS the deflated Sharpe result, and below 0.5 means \
+the evidence does not survive the number of strategies tried. Never place these \
+in the same column as a Sharpe ratio or compare them to one.
+
+A LONG-ONLY result is not a test of a cross-sectional hypothesis. Long-only \
+holds the market plus a tilt, so its Sharpe carries market beta and is not \
+comparable to the long/short spread. The long/short spread is what isolates the \
+effect, and it is the number that answers the question. There is currently no \
+benchmark tool, so you cannot measure how much of a long-only result is beta: \
+say so rather than treating a high long-only Sharpe as support. A long-only \
+Sharpe that beats the long/short spread is usually evidence about the market \
+over the window, not about the hypothesis.
+
 Report honestly. "The evidence is insufficient" is a legitimate and frequent \
 answer, and a short sample with a high Sharpe is usually exactly that. Do not \
 dress up a weak result. State what was measured, what it means, and what would \

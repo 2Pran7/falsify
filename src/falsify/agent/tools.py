@@ -146,7 +146,7 @@ _SPECS: dict[str, dict[str, Any]] = {
             "weights, and run the backtest engine. Returns a handle plus performance metrics "
             "over the INVESTED window only, because a signal needing 252 days of history "
             "leaves the early sample holding nothing and averaging over those flat days "
-            "understates every metric. Every call counts as a trial for later deflation."
+            "understates every metric. Every call counts as a trial for later deflation. long_short=True is the dollar-neutral spread that isolates the cross-sectional effect and is the correct test of a ranking hypothesis; long_short=False holds the market plus a tilt, so its Sharpe includes market beta that no tool here can separate out."
         ),
         "properties": {
             "feature_handle": {
@@ -188,7 +188,11 @@ _SPECS: dict[str, dict[str, Any]] = {
             "the expected best-of-N-trials Sharpe, the deflated Sharpe, and the minimum track "
             "record length. This is what decides whether a Sharpe ratio means anything. "
             "n_trials defaults to the number of backtests actually run in this session, which "
-            "is the honest count; supplying a lower number will not reduce the deflation."
+            "is the honest count; supplying a lower number will not reduce the deflation. "
+            "IMPORTANT: the count is taken when you call, so an analysis run before further "
+            "backtests is deflated too generously. After your LAST backtest, call this again "
+            "on every backtest you intend to report, and quote only those numbers. The "
+            "prob_* fields it returns are probabilities in [0,1], never Sharpe ratios."
         ),
         "properties": {
             "backtest_handle": {
@@ -577,13 +581,34 @@ def analyze_results(
         "skew": round(st["skew"], 4),
         "kurtosis": round(st["kurt"], 4),
         "n_observations": int(st["n"]),
-        "psr": round(psr, 4),
-        "expected_max_sharpe": round(emax, 6),
-        "deflated_sharpe": round(dsr, 4),
-        "min_track_record_length": round(trl, 1),
+        # PSR and DSR are PROBABILITIES, not Sharpe ratios. The field names say
+        # so, because a key called "deflated_sharpe" invites the reader to put
+        # a number in [0,1] next to an actual Sharpe in the same column and
+        # then reason about the comparison. That happened on the first real
+        # run: a 0.65 Sharpe was tabulated beside a "deflated Sharpe" of 0.73,
+        # which is impossible for a deflated ratio and perfectly ordinary for
+        # a probability.
+        "prob_sharpe_above_zero": round(psr, 4),
+        "prob_beats_best_of_n_trials": round(dsr, 4),
+        "expected_max_sharpe_from_luck": round(emax, 6),
+        "min_track_record_length_days": round(trl, 1),
         "n_trials_used": used,
         "n_trials_observed": observed,
         "trial_variance_assumption": TRIAL_VARIANCE,
+        "units_note": (
+            "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. "
+            "prob_beats_best_of_n_trials is the deflated Sharpe: the probability "
+            "this strategy's true Sharpe beats what the best of n_trials worthless "
+            "strategies would have printed. Below 0.5 means the evidence does not "
+            "survive the number of things tried. Never tabulate these beside a "
+            "Sharpe ratio as though they shared units."
+        ),
+        "n_trials_note": (
+            f"n_trials_used={used} is the count AS OF THIS CALL. Running further "
+            "backtests afterwards raises the honest count and makes this figure "
+            "too generous. Call analyze_results again on every backtest after the "
+            "last one has run, and report those numbers."
+        ),
     }
     if overridden:
         out["n_trials_overridden"] = True
