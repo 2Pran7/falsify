@@ -28,19 +28,42 @@ from falsify.backtest.portfolio import (
 )
 from falsify.data.quality import drop_suspect_tickers
 from falsify.features.library import add_momentum_12_1
+from falsify.stats.survivorship import restrict_to_members
 
 COST_BPS = 10.0
 N_BUCKETS = 10
 BENCHMARK = "SPY"
 
 
-def momentum_weights(panel: pl.DataFrame, n_buckets: int = N_BUCKETS) -> pl.DataFrame:
-    """Panel of prices -> daily weights for monthly-rebalanced 12-1 momentum."""
+def momentum_weights(
+    panel: pl.DataFrame,
+    n_buckets: int = N_BUCKETS,
+    membership: pl.DataFrame | None = None,
+) -> pl.DataFrame:
+    """Panel of prices -> daily weights for monthly-rebalanced 12-1 momentum.
+
+    Args:
+        panel:      price panel (ticker, ts, close, ...).
+        n_buckets:  decile count for the cross-sectional sort.
+        membership: optional (ts, ticker) point-in-time membership frame. When
+            given, the signal is restricted to names actually in the index that
+            day BEFORE the sort, so bucket boundaries come from the investable
+            universe. None means today's constituent list, i.e. the
+            survivorship-biased run.
+
+    `scripts/run_survivorship.py` calls this twice, once with membership and
+    once without. Both runs MUST come from this one function: two separately
+    written momentum definitions could differ in some detail and the measured
+    gap would then be the difference between the implementations rather than
+    the difference between the universes.
+    """
     signal = (
         add_momentum_12_1(panel)
         .select(["ts", "ticker", pl.col("mom_12_1").alias("sig")])
         .drop_nulls("sig")
     )
+    if membership is not None:
+        signal = restrict_to_members(signal, membership)
     if signal.is_empty():
         return pl.DataFrame(schema={"ts": pl.Date, "ticker": pl.Utf8, "w": pl.Float64})
 
