@@ -24,7 +24,10 @@ WHAT TO LOOK FOR IN THE OUTPUT, in order of importance:
      project is named for. The second outcome is the better demo.
 
 The transcript is written to .cache/runs/ so a run can be read back later
-without paying for it again.
+without paying for it again. That directory is gitignored and is a debugging
+aid, not an artifact: the DURABLE record is the row this script writes to
+`research_note` (Module 5). Read it back with `scripts/show_notes.py`, which
+needs no API key and costs nothing.
 """
 from __future__ import annotations
 
@@ -43,6 +46,8 @@ from falsify.agent.loop import RunConfig, run
 from falsify.agent.session import Session
 from falsify.agent.provenance import check_run
 from falsify.agent.tools import TRIAL_VARIANCE, ToolError, analyze_results
+from falsify.notes import from_run
+from falsify.notes import store as note_store
 
 load_dotenv()
 
@@ -155,6 +160,10 @@ def main() -> None:
     ap.add_argument("--max-turns", type=int, default=12)
     ap.add_argument("--budget", type=int, default=200_000,
                     help="total token budget for the run")
+    ap.add_argument("--eval-key", default=None,
+                    help="Module 6 anomaly slug; re-running one overwrites its note")
+    ap.add_argument("--no-store", action="store_true",
+                    help="skip the database write (the run still costs money)")
     args = ap.parse_args()
 
     config = RunConfig(max_turns=args.max_turns, max_total_tokens=args.budget)
@@ -188,6 +197,51 @@ def main() -> None:
             f"  NOT COMPLETE: a guard fired ({result.stop_reason}). The answer\n"
             "  above is partial and must not be quoted as a finding."
         )
+
+    # -- Module 5: the durable record --------------------------------------
+    #
+    # Built whether or not it is publishable, and stored either way. A run that
+    # failed provenance or was cut short is evidence, and an eval suite that
+    # keeps only its successes is a highlight reel.
+    note = from_run(
+        result,
+        hypothesis=args.hypothesis,
+        provenance_report=prov,
+        session=session,
+        eval_key=args.eval_key,
+    )
+    print("\nRESEARCH NOTE")
+    if note.publishable:
+        print("  PUBLISHABLE: provenance passed, the run completed, statistics computed.")
+    else:
+        print("  NOT PUBLISHABLE — stored anyway, as a failure:")
+        for reason in note.unpublishable_reasons:
+            print(f"    - {reason}")
+
+    if args.no_store:
+        print("  --no-store: not written to the database.")
+    else:
+        try:
+            note_store.apply_schema()
+            note_id = note_store.save(note)
+            counts = note_store.counts()
+            print(f"  stored as {note_id}")
+            print(
+                f"  research_note now holds {counts['total']} note(s): "
+                f"{counts['publishable']} publishable, "
+                f"{counts['unpublishable']} not."
+            )
+            print(f"  read it back with:  python scripts/show_notes.py {note_id}")
+        except Exception as exc:
+            # The run has already been paid for. Losing the note to a database
+            # that is down would be the one failure worth shouting about, so
+            # say so loudly and point at the transcript that did survive.
+            print(f"  DATABASE WRITE FAILED: {exc}")
+            print(
+                "  The run cost real money and its note is NOT durable. Start\n"
+                "  Postgres (docker compose up -d) and re-store from the\n"
+                "  transcript below, or re-run."
+            )
 
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")

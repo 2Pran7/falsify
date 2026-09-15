@@ -94,6 +94,13 @@ say so rather than treating a high long-only Sharpe as support. A long-only \
 Sharpe that beats the long/short spread is usually evidence about the market \
 over the window, not about the hypothesis.
 
+Quote every figure EXACTLY as the tool returned it. Do not round to a nicer \
+number, and do not write an approximation alongside the real one: if a tool \
+returned 1655, write 1655 or 1,655, never "about 1,600" or ">1,600". Rounding \
+to a round number produces a figure the pipeline never computed, so a reader \
+cannot check it, and the provenance check will reject the note. Percentages, \
+decimal places and days-to-years conversions of a returned number are fine.
+
 Report honestly. "The evidence is insufficient" is a legitimate and frequent \
 answer, and a short sample with a high Sharpe is usually exactly that. Do not \
 dress up a weak result. State what was measured, what it means, and what would \

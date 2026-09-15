@@ -19,6 +19,22 @@ Two signatures identify a splice without touching the return distribution:
   level shift   a single-session price ratio beyond about 4x. Splits and
                 dividends are already adjusted at ingest, and no continuously
                 listed equity moves that far in one session.
+
+LIMITATION, disclosed rather than hidden: THIS GATE IS NOT POINT-IN-TIME.
+`drop_suspect_tickers` evaluates the whole panel at once and removes an
+offending ticker from every date in it, so a splice that only becomes
+detectable in 2026 also removes that ticker from a 2025 backtest. That is
+future information shaping the universe, which is the same class of bias
+`stats/survivorship.py` exists to measure.
+
+It is kept for now because the alternative is worse: a fictitious price formed
+by splicing two different companies produces a momentum score that stays wrong
+for a full year. The bias runs toward a cleaner universe rather than a more
+profitable one, so it does not flatter returns the way a return-magnitude
+screen would. The correct fix is a point-in-time variant that excludes a ticker
+only from the date its defect becomes detectable, keeping its earlier, genuine
+history in the sample. Scheduled for Module 6, where the window lengthens and
+the number of affected names grows.
 """
 from __future__ import annotations
 
