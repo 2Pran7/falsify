@@ -136,20 +136,75 @@ def main() -> int:
           f"({len(covered) - max_member_days} short)")
 
     # --- cause B: interior snapshot gaps ---------------------------------
+    #
+    # A GAP ONLY COSTS SOMETHING WHERE THERE ARE PRICES. The snapshot history
+    # now reaches back to 2012 while the price panel covers two years, so most
+    # gaps sit entirely outside the sample and affect nothing. The first version
+    # of this script reported the largest gap anywhere and called it "inside the
+    # price panel", which was false and was about to be used to make a decision.
+    #
+    # So gaps are split in two: those that OVERLAP the panel, which are
+    # affecting results now, and those that do not, which are a forecast of what
+    # a longer price window will run into.
     print("\n=== CAUSE B: INTERIOR SNAPSHOT GAPS ===")
-    gaps = (
+    all_gaps = (
         pl.DataFrame({"as_of": snap_dates})
-        .with_columns((pl.col("as_of") - pl.col("as_of").shift(1)).alias("gap"))
-        .drop_nulls("gap")
-        .with_columns(pl.col("gap").dt.total_days().alias("gap_days"))
+        .with_columns(pl.col("as_of").shift(1).alias("prev"))
+        .drop_nulls("prev")
+        .with_columns((pl.col("as_of") - pl.col("prev")).dt.total_days().alias("gap_days"))
         .filter(pl.col("gap_days") > 45)
         .sort("gap_days", descending=True)
     )
-    if gaps.is_empty():
-        print("  no gap between consecutive snapshots exceeds 45 days.")
+    first_day, last_day = dates.min(), dates.max()
+    # Overlap test on the OPEN interval the gap spans: (prev, as_of].
+    inside = all_gaps.filter(
+        (pl.col("as_of") > first_day) & (pl.col("prev") < last_day)
+    )
+    outside = all_gaps.filter(
+        ~((pl.col("as_of") > first_day) & (pl.col("prev") < last_day))
+    )
+
+    print(f"  price panel spans {first_day} to {last_day}")
+    print(f"  gaps over 45 days, anywhere in the snapshot history: {len(all_gaps)}")
+    print(f"\n  AFFECTING THIS PANEL ({len(inside)}):")
+    if inside.is_empty():
+        print("    none. Every snapshot gap sits outside the priced window.")
     else:
-        print(f"  {len(gaps)} gap(s) over 45 days between consecutive snapshots:")
-        print(gaps.select(["as_of", "gap_days"]).head(10))
+        print(inside.select(["prev", "as_of", "gap_days"]))
+
+    print(f"\n  OUTSIDE THIS PANEL ({len(outside)}) — a forecast, not a current defect:")
+    if outside.is_empty():
+        print("    none.")
+    else:
+        print(outside.select(["prev", "as_of", "gap_days"]).head(8))
+        print("    These cost nothing today and every one of them moves INSIDE the")
+        print("    sample the moment the price window is lengthened. Check this list")
+        print("    against the window you are about to buy.")
+
+    # MEMBERSHIP RESOLUTION: the number to disclose when a gap cannot be closed.
+    # A backward as-of join dates every removal to the next snapshot, so the
+    # error on any membership date is bounded by the local snapshot spacing.
+    # Quoting that bound is honest; claiming daily point-in-time membership from
+    # a source committed every few weeks is not.
+    in_window = snap_dates.filter(
+        (snap_dates >= first_day) & (snap_dates <= last_day)
+    )
+    if len(in_window) >= 2:
+        spacing = (
+            pl.DataFrame({"as_of": in_window})
+            .with_columns(
+                (pl.col("as_of") - pl.col("as_of").shift(1)).dt.total_days().alias("d")
+            )
+            .drop_nulls("d")["d"]
+        )
+        print(f"\n  MEMBERSHIP RESOLUTION over the priced window:")
+        print(f"    {len(in_window)} snapshots · median spacing {spacing.median():.0f} days"
+              f" · worst {spacing.max()} days")
+        print(f"    Membership is accurate to within the LOCAL spacing, so a removal is")
+        print(f"    dated up to {spacing.max()} days late in the worst case. That is the")
+        print("    number to put in the write-up, not a claim of daily accuracy.")
+
+    gaps = inside  # only overlapping gaps drive the verdict
 
     # --- CAUSE B, CONTINUED: what the member-day CLUSTER actually is -----
     #
@@ -255,12 +310,18 @@ def main() -> int:
     verdict = 0
     if not gaps.is_empty():
         worst = int(gaps["gap_days"][0])
-        print(f"\nVERDICT: CAUSE B. The largest interior snapshot gap is {worst} days, and")
-        print("  it is INSIDE the price panel, not at its edge. Every index removal in that")
-        print("  window is dated to the snapshot that closed it, so the point-in-time leg")
-        print("  holds those names for up to that long after they left the index.")
-        print("  Backfill the missing commits BEFORE lengthening the price window, and do")
-        print("  not re-quote the survivorship gap until this is closed.")
+        when = gaps["as_of"][0]
+        print(f"\nVERDICT: CAUSE B. The largest snapshot gap OVERLAPPING the priced")
+        print(f"  window is {worst} days, closing {when}. Every index removal inside it")
+        print("  is dated to the snapshot that closed it, so the point-in-time leg holds")
+        print("  those names for up to that long after they left the index.")
+        print()
+        print("  IF scripts/build_pit_universe.py HAS ALREADY BEEN RUN and this gap is")
+        print("  still here, the commits do not exist: the gap is in the SOURCE, not the")
+        print("  ingest, and it cannot be closed for free. It is then a LIMIT ON")
+        print("  MEMBERSHIP RESOLUTION, to be disclosed and bounded rather than fixed.")
+        print("  The honest statement is that membership is accurate to within the local")
+        print("  snapshot spacing, and that spacing is printed above.")
         verdict = 1
     elif max_member_days >= len(covered) - 2:
         print("\nVERDICT: CAUSE A, working as designed. The shortfall is the pre-snapshot")
@@ -268,7 +329,7 @@ def main() -> int:
         print("  the shorter PIT window and state it.")
     else:
         print("\nVERDICT: UNEXPLAINED. The shortfall is larger than the pre-snapshot window")
-        print("  and there are no interior snapshot gaps. Do not backfill until this is")
+        print("  and no snapshot gap overlaps the sample. Do not backfill until this is")
         print("  understood: it would move an unexplained deficit inside the sample.")
         verdict = 1
     return verdict

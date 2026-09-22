@@ -187,7 +187,9 @@ scripts/validate_stats.py   the statistics re-derived by simulation, not unit te
 scripts/run_agent.py        one hypothesis end to end; prints and stores what it cost
 scripts/show_notes.py       read notes back with no API key and no spend
 scripts/run_evals.py        the eval suite: --compare, --check, --store, --registry
-scripts/diagnose_membership.py  why every ticker shows 374 member-days
+scripts/diagnose_membership.py  snapshot gaps, member-day clusters, membership resolution
+scripts/ingest_dropped.py   prices for the names that LEFT the index
+scripts/inject_module6.py   the nineteen-injection audit, re-runnable
 tests/                      synthetic data with hand-computed expected values
 db/schema.sql               daily_bars, universe_snapshot, ingest_log, research_note,
                             eval_result
@@ -277,6 +279,34 @@ plausible alternative silently produces a wrong number:
 today's membership: it reproduces the current-constituents result exactly, with
 full coverage, no gap, and a survivorship audit that measures zero. It is the
 failure mode that fails by looking healthy.
+
+### Membership resolution, and why it is quoted rather than claimed away
+
+Point-in-time membership here is reconstructed from the commit history of a
+maintained CSV: **193 dated snapshots from December 2012**, recovered by
+`scripts/build_pit_universe.py` for the cost of a clone. The join is
+backward-only — each date inherits the most recent snapshot at or before it —
+so **a removal is dated to the next snapshot, never to the day it happened.**
+
+That makes the error on any membership date equal to the local snapshot
+spacing, and the spacing is not uniform. Over the current priced window the
+median is a few weeks and **the worst case is 204 days**: the maintainers
+committed nothing between 2025-08-12 and 2026-03-04, so every index removal in
+that stretch is recorded as happening on 2026-03-04. Thirteen tickers share
+exactly the same membership end date for that reason.
+
+**This is a source limitation, not an ingest bug**, and re-running the backfill
+confirmed it: the commits do not exist. So it is disclosed and bounded rather
+than fixed. `scripts/diagnose_membership.py` prints the spacing, separates gaps
+that overlap the priced window from gaps that do not, and identifies the
+clusters a gap creates.
+
+**The practical consequence:** over a gap, names that have left the index are
+still held, and index removals are disproportionately fallers. A second error
+runs the other way — a point-in-time member whose prices were never ingested
+contributes nothing, thinning the leg — and `scripts/ingest_dropped.py` exists
+to close that one, because unlike the first it is closeable. Neither error
+cancels the other, and both are stated wherever the survivorship number is.
 
 ## Research notes
 
