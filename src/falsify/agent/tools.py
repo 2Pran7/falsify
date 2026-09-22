@@ -718,6 +718,11 @@ def analyze_results(
         trial count, the deflated Sharpe, the minimum track record length, and
         the naive p-value. Plus `n_trials_used` and `n_trials_observed`.
 
+        `min_track_record_length_days` is None for a series whose Sharpe is at
+        or below the benchmark, because the answer is genuinely infinite rather
+        than unknown, and a note says so. Every other statistic is still
+        returned: a losing strategy has a perfectly well-defined PSR.
+
     Raises:
         ToolError: bad handle, or a return series too short for the statistics.
 
@@ -750,11 +755,39 @@ def analyze_results(
         psr = deflated.probabilistic_sharpe(st["sr"], st["skew"], st["kurt"], int(st["n"]))
         emax = deflated.expected_max_sharpe(used, TRIAL_VARIANCE)
         dsr = deflated.deflated_sharpe(returns, used, TRIAL_VARIANCE)
-        trl = deflated.min_track_record_length(st["sr"], st["skew"], st["kurt"])
     except ValueError as exc:
         raise ToolError(
             f"series too short or degenerate for the statistics: {exc}"
         ) from exc
+
+    # MinTRL IS THE ONE STATISTIC HERE THAT CAN BE LEGITIMATELY UNDEFINED, and it
+    # must not be allowed to take the other four down with it.
+    #
+    # "How long before this Sharpe is distinguishable from zero?" has no finite
+    # answer when the Sharpe is BELOW zero: the track record never arrives.
+    # `min_track_record_length` raises, correctly. But PSR and the deflated
+    # Sharpe are perfectly computable on a losing series -- a PSR of 0.05 is a
+    # real and useful statement -- and the original code wrapped all five calls
+    # in one try, so one undefined quantity returned NOTHING.
+    #
+    # FOUND BY THE EVAL SUITE'S FIRST REAL RUN, and it was not cosmetic. Four of
+    # the six registered anomalies predict a NEGATIVE raw spread, so a working
+    # low-volatility or reversal effect produces exactly the negative Sharpe
+    # that kills this call. The suite would then see no deflation statistic,
+    # apply "a missing statistic is not a satisfied condition", and score a
+    # REDISCOVERED ANOMALY AS A FAILURE -- with a reason that looked principled.
+    trl: float | None
+    try:
+        trl = deflated.min_track_record_length(st["sr"], st["skew"], st["kurt"])
+        trl_note = None
+    except ValueError as exc:
+        trl = None
+        trl_note = (
+            f"min_track_record_length is undefined here and that is not an error: "
+            f"{exc}. A strategy whose Sharpe is at or below the benchmark never "
+            "accumulates enough track record to prove otherwise. Every other "
+            "statistic in this result is unaffected."
+        )
 
     out = {
         "sharpe_per_period": round(st["sr"], 6),
@@ -772,7 +805,7 @@ def analyze_results(
         "prob_sharpe_above_zero": round(psr, 4),
         "prob_beats_best_of_n_trials": round(dsr, 4),
         "expected_max_sharpe_from_luck": round(emax, 6),
-        "min_track_record_length_days": round(trl, 1),
+        "min_track_record_length_days": None if trl is None else round(trl, 1),
         "n_trials_used": used,
         "n_trials_observed": observed,
         "trial_variance_assumption": TRIAL_VARIANCE,
@@ -791,6 +824,8 @@ def analyze_results(
             "last one has run, and report those numbers."
         ),
     }
+    if trl_note is not None:
+        out["min_track_record_length_note"] = trl_note
     if overridden:
         out["n_trials_overridden"] = True
         out["note"] = (

@@ -427,3 +427,123 @@ def test_no_universe_tool_result_leaks_a_payload(s, pit):
         assert len(json.dumps(o, default=str)) < MAX_SUMMARY_BYTES
         for v in o.values():
             assert not isinstance(v, (list, tuple, pl.DataFrame, pl.Series))
+
+
+# --- found by the eval suite's first real run -------------------------------
+#
+# These belong to `analyze_results`, which is a Module 4 file, but they are here
+# because the eval suite is what exposed the defect and the eval suite is why it
+# matters. Four of the six registered anomalies predict a NEGATIVE raw spread.
+
+
+def _losing_series(n: int = 400) -> pl.Series:
+    """A deterministic return series with a negative Sharpe and real variance."""
+    return pl.Series("ret", [-0.0005 + 0.01 * math.sin(0.3 * i) for i in range(n)])
+
+
+def test_a_negative_sharpe_still_gets_its_probability_statistics():
+    """THE BUG THE FIRST REAL EVAL RUN FOUND.
+
+    "How long before this Sharpe is distinguishable from zero?" has no finite
+    answer when the Sharpe is BELOW zero, so `min_track_record_length` raises,
+    correctly. The original `analyze_results` wrapped all five statistics in one
+    try, so one legitimately-undefined quantity returned NOTHING at all.
+
+    PSR and the deflated Sharpe are perfectly computable on a losing series. A
+    PSR of 0.05 is a real and useful statement, and it was being thrown away.
+    """
+    from falsify.stats import deflated
+
+    r = _losing_series()
+    st = deflated.sharpe_stats(r)
+    assert st["sr"] < 0
+
+    # The two that must survive.
+    assert 0.0 <= deflated.probabilistic_sharpe(
+        st["sr"], st["skew"], st["kurt"], int(st["n"])
+    ) <= 1.0
+    assert 0.0 <= deflated.deflated_sharpe(r, 5, T.TRIAL_VARIANCE) <= 1.0
+
+    # The one that is genuinely undefined, and stays that way.
+    with pytest.raises(ValueError, match="MinTRL is infinite"):
+        deflated.min_track_record_length(st["sr"], st["skew"], st["kurt"])
+
+
+def test_analyze_results_survives_an_undefined_min_track_record_length(s, monkeypatch):
+    """The whole call must still return, with the undefined field set to None.
+
+    WHY THIS IS NOT COSMETIC: a working low-volatility or reversal anomaly
+    produces exactly the negative raw spread that triggers this. The eval suite
+    would then see no deflation statistic, apply its own rule that a missing
+    statistic is not a satisfied condition, and score a REDISCOVERED ANOMALY AS
+    A FAILURE — with a reason that reads as principled.
+    """
+    r = _losing_series()
+    handle = s.put(
+        "backtest",
+        {"result": None, "invested": pl.DataFrame({"ret": r})},
+        {"sharpe": -1.0},
+    )
+    out = T.analyze_results(s, handle)
+
+    assert out["sharpe_per_period"] < 0
+    assert out["min_track_record_length_days"] is None
+    assert 0.0 <= out["prob_sharpe_above_zero"] <= 1.0
+    assert 0.0 <= out["prob_beats_best_of_n_trials"] <= 1.0
+
+
+def test_the_undefined_track_record_carries_a_reason_rather_than_a_bare_none(s):
+    """A None with nothing attached reads as "we failed to compute it" when it
+    means "the answer is infinite". Same rule as every other verdict in this
+    project: the number is useless without why."""
+    handle = s.put(
+        "backtest",
+        {"result": None, "invested": pl.DataFrame({"ret": _losing_series()})},
+        {"sharpe": -1.0},
+    )
+    out = T.analyze_results(s, handle)
+    note = out.get("min_track_record_length_note", "")
+    assert "undefined" in note and "not an error" in note
+
+
+def test_a_positive_sharpe_still_reports_a_finite_track_record_length(s):
+    """The control. If this ever came back None too, the fix above would have
+    turned a real statistic into a silent None for every strategy."""
+    r = pl.Series("ret", [0.002 + 0.01 * math.sin(0.3 * i) for i in range(400)])
+    handle = s.put(
+        "backtest", {"result": None, "invested": pl.DataFrame({"ret": r})}, {"sharpe": 1.0}
+    )
+    out = T.analyze_results(s, handle)
+    assert out["min_track_record_length_days"] is not None
+    assert out["min_track_record_length_days"] > 0
+    assert "min_track_record_length_note" not in out
+
+
+def test_a_working_negative_direction_anomaly_is_not_failed_for_a_missing_statistic():
+    """The end-to-end consequence, at the scorer.
+
+    An anomaly that WORKS in the direction its paper predicted — raw spread
+    negative, oriented spread positive — must reach the deflation gate with a
+    real number. Before the fix it reached it with None and was failed.
+    """
+    from falsify.eval import registry as R
+    from falsify.eval.score import Measurement, score_anomaly
+
+    worked = Measurement(
+        key="low_volatility",
+        realised_sharpe=-0.9,      # raw: the BOTTOM bucket won, as predicted
+        p_value=0.001,
+        deflated_psr=0.97,         # available, because MinTRL no longer kills it
+        history_days=800,
+        n_invested_days=400,
+        n_trials=5,
+    )
+    assert score_anomaly(worked, R.get("low_volatility"), 0.001).verdict == "pass"
+
+    starved = Measurement(**{**worked.__dict__, "deflated_psr": None})
+    starved_score = score_anomaly(starved, R.get("low_volatility"), 0.001)
+    assert starved_score.verdict == "fail"
+    assert any("missing statistic" in r for r in starved_score.reasons), (
+        "this is what the bug produced: a rediscovered anomaly failed for a "
+        "reason that reads as principled"
+    )

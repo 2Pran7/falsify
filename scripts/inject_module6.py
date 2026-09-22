@@ -147,6 +147,13 @@ INJECTIONS = [
      "    return sum((s - mean) ** 2 for s in sharpes) / (len(sharpes) - 1) * 252",
      "tests/test_eval_runner.py"),
 
+    # --- tools.py: the statistic that is allowed to be undefined ----------
+    ("an undefined MinTRL kills the whole analysis",
+     "src/falsify/agent/tools.py",
+     "    except ValueError as exc:\n        trl = None",
+     "    except ValueError as exc:\n        raise ToolError(f'stats failed: {exc}') from exc\n        trl = None",
+     "tests/test_tools_universe.py"),
+
     # --- store.py: the schema ---------------------------------------------
     ("eval rows keyed on `eval_key` alone",
      "src/falsify/eval/store.py",
@@ -209,18 +216,23 @@ def main() -> int:
     missed = []
     for i, (label, rel, old, new, target) in enumerate(INJECTIONS, 1):
         path = ROOT / rel
-        original = path.read_text()
-        if old not in original:
+        # BINARY, NOT TEXT. `read_text`/`write_text` open in text mode, which on
+        # Windows translates \n to \r\n on the way out. The content reverts
+        # perfectly and every line ending changes, so a clean tree comes back
+        # dirty in six files and the final guard cries wolf. Found on the first
+        # real run; the bytes in must be the bytes out.
+        original = path.read_bytes()
+        if old.encode() not in original:
             print(f"{i:>3}  {label:58s} PATTERN NOT FOUND")
             missed.append(label)
             continue
-        patched = original.replace(old, new, 1)
+        patched = original.replace(old.encode(), new.encode(), 1)
         assert patched != original, "edit was a no-op"
-        path.write_text(patched)
+        path.write_bytes(patched)
         try:
             green = run(target)
         finally:
-            path.write_text(original)
+            path.write_bytes(original)
         if green:
             print(f"{i:>3}  {label:58s} *** MISSED ***")
             missed.append(label)
