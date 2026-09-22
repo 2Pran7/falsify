@@ -221,7 +221,7 @@ def main() -> int:
     # removals are disproportionately fallers. The PIT universe is not
     # point-in-time over that window; it is stale-membership, and the
     # survivorship gap measured against it inherits the error.
-    print("\n=== CAUSE B, CONTINUED: THE MEMBER-DAY CLUSTER ===")
+    print("\n=== CAUSE B, CONTINUED: MEMBER-DAY CLUSTERS ===")
     full = len(covered)
     clusters = (
         md.filter(pl.col("n_member_days") < full)
@@ -231,55 +231,89 @@ def main() -> int:
     if clusters.is_empty():
         print("  no ticker is short of the full panel; nothing to explain.")
     else:
-        print(f"  full panel is {full} trading days. Largest short clusters:")
-        print(clusters.head(5))
-        top = int(clusters["n_member_days"][0])
-        names = (
-            md.filter(pl.col("n_member_days") == top)
-            .sort("ticker")["ticker"].to_list()
-        )
-        print(f"\n  {len(names)} tickers share exactly {top} member-days: "
-              f"{', '.join(names[:12])}{' ...' if len(names) > 12 else ''}")
+        # A cluster is a group of tickers whose membership all ends on the same
+        # day. There are TWO reasons that happens and they are opposites:
+        #
+        #   ENDS AT THE PANEL'S LAST DATE -> these are still members. They JOINED
+        #   late, and their short count is their tenure, not a removal. The first
+        #   version of this script reported them as removals and alarmed about
+        #   the gap before the panel's final snapshot, which is nonsense: nobody
+        #   left.
+        #
+        #   ENDS BEFORE IT -> a genuine removal, dated to the snapshot that
+        #   noticed. Only these inherit the snapshot gap's error.
+        #
+        # And they are ranked by the SIZE OF THE GAP that created them, not by
+        # how many tickers they contain. A 13-day lag on a monthly rebalance is
+        # immaterial; a 204-day one is the finding. Ranking by count put the
+        # harmless cluster first and attached 204-day language to it. A checker
+        # that cries wolf gets switched off.
+        last_day = dates.max()
+        rows = []
+        for n_days in clusters["n_member_days"].to_list():
+            names = md.filter(pl.col("n_member_days") == n_days)["ticker"].to_list()
+            ends = (
+                membership.filter(pl.col("ticker").is_in(names))
+                .group_by("ticker").agg(pl.col("ts").max().alias("last"))["last"]
+                .unique()
+            )
+            if len(ends) != 1:
+                continue
+            end = ends[0]
+            after = snap_dates.filter(snap_dates > end)
+            before = snap_dates.filter(snap_dates <= end)
+            gap = (
+                int((after.min() - before.max()).days)
+                if len(after) and len(before) else None
+            )
+            rows.append({
+                "n_member_days": int(n_days), "n_tickers": len(names),
+                "ends": end, "kind": "joined late" if end == last_day else "removed",
+                "gap_days": gap, "names": names,
+            })
 
-        last_days = (
-            membership.filter(pl.col("ticker").is_in(names))
-            .group_by("ticker").agg(pl.col("ts").max().alias("last"))
+        joined = [r for r in rows if r["kind"] == "joined late"]
+        removed = sorted(
+            [r for r in rows if r["kind"] == "removed"],
+            key=lambda r: r["gap_days"] or 0, reverse=True,
         )
-        distinct_last = last_days["last"].unique().sort()
-        print(f"  their membership ends on {len(distinct_last)} distinct date(s): "
-              f"{', '.join(str(d) for d in distinct_last.to_list()[:5])}")
 
-        if len(distinct_last) == 1:
-            ends = distinct_last[0]
-            after = snap_dates.filter(snap_dates > ends)
-            print(f"\n  CONFIRMED: all {len(names)} end on {ends}, the last trading day")
-            if len(after):
-                nxt = after.min()
-                before = snap_dates.filter(snap_dates <= ends)
-                prev = before.max() if len(before) else None
-                gap = (nxt - prev).days if prev else None
-                print(f"  before the snapshot of {nxt}.")
-                print(f"  The previous snapshot was {prev}, a gap of {gap} days.")
-                print(
-                    f"\n  SO: every removal that happened between {prev} and {nxt} was\n"
-                    f"  recorded as happening on {nxt}. Those names were carried as index\n"
-                    f"  MEMBERS for up to {gap} days after they actually left. Index removals\n"
-                    "  are disproportionately fallers, so over that window the\n"
-                    "  point-in-time leg is not point-in-time -- it is stale membership, and\n"
-                    "  the survivorship gap measured against it inherits the error.\n"
-                    "\n  THE GAP IS ALREADY INSIDE THE SAMPLE. It is not a pre-snapshot\n"
-                    "  window that costs nothing; it sits in the middle of the panel and it\n"
-                    "  is affecting the headline number NOW."
-                )
-                print(
-                    f"\n  Fix, in order: re-run scripts/build_pit_universe.py and see whether\n"
-                    f"  the {gap}-day gap is in the SOURCE (the maintainers committed nothing)\n"
-                    "  or in the INGEST (commits exist and were not walked). Only the second\n"
-                    "  is fixable, and it is fixable for free."
-                )
+        if joined:
+            n = sum(r["n_tickers"] for r in joined)
+            print(f"\n  STILL MEMBERS, joined during the window: {n} ticker(s) in "
+                  f"{len(joined)} cluster(s).")
+            print("    Their short member-day count is tenure, not a removal. Not a defect.")
+            for r in joined[:3]:
+                print(f"      {r['n_tickers']:>3} tickers, {r['n_member_days']} days: "
+                      f"{', '.join(r['names'][:8])}{' ...' if len(r['names']) > 8 else ''}")
+
+        if not removed:
+            print("\n  No removal cluster in this window.")
         else:
-            print("\n  NOT a single-date cluster. The identical counts are a coincidence of")
-            print("  length rather than a common removal date; investigate individually.")
+            print(f"\n  REMOVAL CLUSTERS, worst gap first ({len(removed)}):")
+            for r in removed[:5]:
+                print(f"    {r['n_tickers']:>3} tickers ended {r['ends']} "
+                      f"after a {r['gap_days']}-day snapshot gap")
+            worst = removed[0]
+            g = worst["gap_days"] or 0
+            print(f"\n    Worst: {worst['n_tickers']} tickers ending {worst['ends']} — "
+                  f"{', '.join(worst['names'][:8])}"
+                  f"{' ...' if len(worst['names']) > 8 else ''}")
+            if g > 45:
+                print(
+                    f"\n    MATERIAL. Every removal between the previous snapshot and\n"
+                    f"    {worst['ends']} is dated to the snapshot that closed a {g}-day gap,\n"
+                    f"    so those names were carried as index MEMBERS for up to {g} days\n"
+                    "    after they left. Index removals are disproportionately fallers, so\n"
+                    "    over that window the point-in-time leg is stale membership rather\n"
+                    "    than point-in-time, and the survivorship gap inherits the error."
+                )
+            else:
+                print(
+                    f"\n    IMMATERIAL. A {g}-day lag is within normal snapshot spacing and\n"
+                    "    well inside a monthly rebalance, so no trade is affected. Recorded\n"
+                    "    for completeness, not as a defect."
+                )
 
     print("\n=== PRICE COVERAGE OF POINT-IN-TIME MEMBERS ===")
     print("  (a member-day with no ingested price contributes nothing to the PIT leg,")
