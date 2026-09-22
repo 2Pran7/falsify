@@ -226,8 +226,18 @@ def test_fetch_data_summary_reports_shape(s, patched):
 
 
 def test_the_panel_is_reachable_through_the_session(s, patched):
+    """Module 6 wrapped the stored frame in a Panel, which carries the universe.
+
+    The assertion changed from "the payload IS a frame" to "the payload carries
+    one", because a bare frame has no record of which universe produced it and
+    three tools later nothing can tell the difference. The universe is asserted
+    here too, so this test still fails if the Panel stops carrying it.
+    """
     h = T.fetch_data(s)["handle"]
-    assert isinstance(s.payload(h, "panel"), pl.DataFrame)
+    panel = s.payload(h, "panel")
+    assert isinstance(panel.frame, pl.DataFrame)
+    assert panel.universe == "current"
+    assert panel.membership is None
 
 
 def test_no_tool_result_contains_a_long_sequence(with_feature):
@@ -344,7 +354,7 @@ def test_compute_feature_reports_coverage_not_just_success(s, patched):
 def test_compute_feature_chains_onto_the_stored_panel(s, patched):
     ph = T.fetch_data(s)["handle"]
     fh = T.compute_feature(s, ph, "vol_21d")["handle"]
-    assert "vol_21d" in s.payload(fh, "feature").columns
+    assert "vol_21d" in s.payload(fh, "feature").frame.columns
 
 
 def test_run_backtest_reports_the_invested_window_not_the_full_sample(with_feature):

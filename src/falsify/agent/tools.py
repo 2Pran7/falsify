@@ -29,6 +29,7 @@ paid for in turns, and turns are the budget.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import polars as pl
@@ -37,14 +38,16 @@ from falsify.agent.session import Session, SessionError
 from falsify.backtest import metrics as m
 from falsify.backtest.engine import BacktestConfig
 from falsify.backtest.engine import run_backtest as engine_run_backtest
-from falsify.backtest.loader import load_panel
+from falsify.backtest.loader import load_panel, load_snapshots
 from falsify.backtest.portfolio import (
     decile_weights,
     hold_until_next_rebalance,
     month_end_dates,
 )
+from falsify.data.pit_universe import membership_panel
 from falsify.features import library as feat
 from falsify.stats import deflated
+from falsify.stats.survivorship import restrict_to_members
 
 # The closed menus. A name outside these sets never reaches the pipeline.
 FEATURES: dict[str, str] = {
@@ -58,7 +61,19 @@ FEATURES: dict[str, str] = {
     "ret_21d": "Simple 21-day (one month) return.",
     "sma_50d": "50-day simple moving average of the close.",
     "sma_200d": "200-day simple moving average of the close.",
+    "rev_36_12": "De Bondt-Thaler long-term reversal: the 3-year return skipping "
+                 "the most recent year. Needs 756 trading days (three years) of "
+                 "history per ticker before it produces any value.",
+    "pct_52w_high": "Close as a fraction of its trailing 252-day maximum. 1.0 means "
+                    "the stock is at its 52-week high. Needs 252 days of history.",
+    "ivol_63d": "Idiosyncratic volatility: annualised standard deviation of the "
+                "residual from regressing daily log returns on SPY's over 63 days, "
+                "with no intercept. NULL EVERYWHERE if SPY is not in the panel — it "
+                "does not fall back to total volatility, because that would score "
+                "the low-volatility effect twice under two names.",
 }
+
+UNIVERSES: tuple[str, ...] = ("current", "point_in_time")
 
 REBALANCE_FREQUENCIES: tuple[str, ...] = ("monthly",)
 
@@ -94,7 +109,49 @@ _BUILDERS = {
     "ret_21d": lambda df: feat.add_returns(df, 21),
     "sma_50d": lambda df: feat.add_sma(df, 50),
     "sma_200d": lambda df: feat.add_sma(df, 200),
+    "rev_36_12": lambda df: feat.add_reversal_36_12(df),
+    "pct_52w_high": lambda df: feat.add_pct_52w_high(df, 252),
+    "ivol_63d": lambda df: feat.add_idio_vol(df, 63),
 }
+
+# Menu key -> the column the builder actually appends.
+#
+# `compute_feature` used to assume these were the same string. Two of the three
+# features added at Module 6 break that assumption — `pct_52w_high` appends
+# `pct_252d_high` — and the failure would not have been a usable tool error. It
+# would have been a KeyError three frames down, inside a frame the model cannot
+# see, on a tool call that had already succeeded.
+#
+# Mapping them explicitly rather than renaming the columns to match keeps the
+# column names honest about what they contain: the window is a parameter, and
+# `pct_52w_high` would be a lie for any window but 252.
+_FEATURE_COLUMNS: dict[str, str] = {
+    "pct_52w_high": "pct_252d_high",
+}
+
+
+def feature_column(feature: str) -> str:
+    """The frame column a menu key produces. Identity unless mapped."""
+    return _FEATURE_COLUMNS.get(feature, feature)
+
+
+@dataclass(frozen=True)
+class Panel:
+    """A price or feature frame, WITH the universe that produced it.
+
+    A bare frame carries no record of which universe it came from. Three tools
+    downstream, nothing can tell a point-in-time panel from a
+    current-constituents one, and the survivorship question becomes
+    unanswerable at exactly the moment it matters. So frame, universe and
+    membership travel together from `fetch_data` to `run_backtest`.
+
+    membership is None for the `current` universe and a (ts, ticker) frame for
+    `point_in_time`. It is NOT applied to `frame`: see `fetch_data`.
+    """
+
+    frame: pl.DataFrame
+    universe: str
+    membership: pl.DataFrame | None = None
 
 # One table drives the schemas AND the validation, so the two cannot drift.
 # A schema that advertises a parameter the validator rejects is a bug the model
@@ -116,9 +173,25 @@ _SPECS: dict[str, dict[str, Any]] = {
             },
             "start": {"type": "string", "description": "Inclusive ISO start date, e.g. 2024-09-04."},
             "end": {"type": "string", "description": "Inclusive ISO end date."},
+            "universe": {
+                "type": "string",
+                "enum": list(UNIVERSES),
+                "description": (
+                    "Which universe the strategy may HOLD. 'current' (the default) is "
+                    "today's S&P 500 constituent list, which is SURVIVORSHIP-BIASED: "
+                    "every company that was in the index during the sample and has "
+                    "since been dropped is invisible, and those are disproportionately "
+                    "the losers. 'point_in_time' restricts holdings to the names that "
+                    "were actually index members on each date, reconstructed from dated "
+                    "membership snapshots. Prefer point_in_time for any claim about "
+                    "historical performance; use current only to MEASURE the gap between "
+                    "the two. point_in_time will refuse to run if the database holds only "
+                    "one snapshot date."
+                ),
+            },
         },
         "required": [],
-        "types": {"tickers": list, "start": str, "end": str},
+        "types": {"tickers": list, "start": str, "end": str, "universe": str},
     },
     "compute_feature": {
         "description": (
@@ -292,6 +365,12 @@ def validate_arguments(tool_name: str, arguments: dict[str, Any]) -> dict[str, A
     # Value-level checks. Ranges are enforced here rather than trusted to the
     # JSON schema, because the schema is advice to the model and this is the
     # gate: a model can and will send something outside it.
+    if tool_name == "fetch_data" and "universe" in arguments:
+        if arguments["universe"] not in UNIVERSES:
+            raise ToolError(
+                f"unknown universe {arguments['universe']!r}. "
+                f"Available: {', '.join(UNIVERSES)}"
+            )
     if tool_name == "compute_feature" and arguments["feature"] not in FEATURES:
         raise ToolError(
             f"unknown feature {arguments['feature']!r}. "
@@ -366,36 +445,89 @@ def fetch_data(
     tickers: list[str] | None = None,
     start: str | None = None,
     end: str | None = None,
+    universe: str = "current",
 ) -> dict[str, Any]:
-    """Load a price panel from the database and store it.
+    """Load a price panel from the database and store it, tagged with its universe.
 
     Args:
         session: the run's handle store.
         tickers: restrict to these tickers; None loads every ingested ticker.
         start, end: inclusive ISO date bounds; None is unbounded.
+        universe: "current" (today's constituent list) or "point_in_time"
+            (membership as it stood on each date).
 
     Returns:
-        `handle` plus a digest: n_rows, n_tickers, first_date, last_date.
+        `handle` plus a digest: n_rows, n_tickers, first_date, last_date,
+        universe, and for point_in_time the snapshot count and member-day total.
 
     Raises:
-        ToolError: the query returned nothing, which the model must be told
-            explicitly — an empty panel silently produces an empty backtest and
-            a confident conclusion about nothing.
+        ToolError: the query returned nothing; or point_in_time was requested
+            and the database cannot support it.
 
-    The panel itself goes into the Session and never into the return value.
-    548 tickers over two years is ~275,000 rows.
+    TWO DECISIONS HERE ARE THE WHOLE OF THE UNIVERSE ARGUMENT, and in both
+    cases the plausible alternative silently produces a wrong number.
+
+    FIRST: THE MASK RESTRICTS WHAT MAY BE HELD, NEVER WHAT THE FEATURES MAY
+    SEE. The price frame is returned WHOLE and the membership frame travels
+    beside it, to be applied to the signal in `run_backtest`. A company that
+    joined the index in March had a price history in February, and its
+    12-month momentum on the day it joined is a real, knowable number.
+    Filtering the price frame to member-days instead would destroy that
+    history and leave every entrant unscored for its first year: a lookahead
+    bug in reverse, which would make the point-in-time universe look worse
+    than it is for a reason that has nothing to do with survivorship.
+
+    SECOND: POINT_IN_TIME REFUSES TO RUN ON A SINGLE SNAPSHOT DATE. That is
+    the state `run_ingest.py` leaves behind on its own, and membership that
+    never changes IS today's membership: it reproduces the current-constituents
+    result exactly, with full coverage, no gap, and a survivorship audit that
+    measures zero. It is the failure mode that FAILS BY LOOKING HEALTHY, so
+    this exits with an instruction instead of proceeding. A check that refuses
+    to run is worth more than a check that warns.
     """
-    panel = load_panel(tickers, start, end)
-    if panel.is_empty():
+    if universe not in UNIVERSES:
+        raise ToolError(
+            f"unknown universe {universe!r}. Available: {', '.join(UNIVERSES)}"
+        )
+
+    frame = load_panel(tickers, start, end)
+    if frame.is_empty():
         raise ToolError(
             "no rows matched. Check the tickers are ingested and the date range is covered."
         )
+
     summary = {
-        "n_rows": len(panel),
-        "n_tickers": panel["ticker"].n_unique(),
-        "first_date": str(panel["ts"].min()),
-        "last_date": str(panel["ts"].max()),
+        "n_rows": len(frame),
+        "n_tickers": frame["ticker"].n_unique(),
+        "first_date": str(frame["ts"].min()),
+        "last_date": str(frame["ts"].max()),
+        "universe": universe,
     }
+
+    membership = None
+    if universe == "point_in_time":
+        snapshots = load_snapshots()
+        n_snapshots = 0 if snapshots.is_empty() else snapshots["as_of"].n_unique()
+        if n_snapshots < 2:
+            raise ToolError(
+                f"point_in_time needs dated membership snapshots and the database has "
+                f"{n_snapshots}. One snapshot is today's membership repeated backwards: "
+                "it reproduces the current-constituents result exactly while reporting "
+                "zero survivorship bias. Run scripts/build_pit_universe.py to backfill "
+                "the snapshot history, or pass universe='current' and say so in the note."
+            )
+        membership = membership_panel(snapshots, frame["ts"].unique())
+        if membership.is_empty():
+            raise ToolError(
+                "point_in_time membership is empty over this date range. Every date "
+                "precedes the first snapshot, so no ticker was a known member. Widen "
+                "the range or backfill earlier snapshots."
+            )
+        summary["n_snapshots"] = int(n_snapshots)
+        summary["n_member_days"] = len(membership)
+        summary["first_snapshot"] = str(snapshots["as_of"].min())
+
+    panel = Panel(frame=frame, universe=universe, membership=membership)
     return {"handle": session.put("panel", panel, summary), **summary}
 
 
@@ -409,7 +541,8 @@ def compute_feature(session: Session, panel_handle: str, feature: str) -> dict[s
 
     Returns:
         `handle` for the feature frame, plus coverage: n_rows, n_non_null,
-        n_tickers_with_values, first_date_with_values.
+        n_tickers_with_values, first_date_with_values, and the universe it
+        inherited.
 
     Raises:
         ToolError: unknown feature, bad handle, or a feature that produced no
@@ -418,6 +551,12 @@ def compute_feature(session: Session, panel_handle: str, feature: str) -> dict[s
     Coverage is reported because it is how the model learns that `mom_12_1` on
     a two-year panel is null for the first year. Without it the model sees a
     successful call and reasons as though the whole sample were scored.
+
+    The feature is computed on the WHOLE price frame, including names that were
+    not index members on every date. That is deliberate and is the first half
+    of the universe rule: membership restricts what may be held, not what may
+    be seen. The Panel carries the membership forward for `run_backtest` to
+    apply at the point of ranking.
     """
     if feature not in FEATURES:
         raise ToolError(
@@ -428,24 +567,38 @@ def compute_feature(session: Session, panel_handle: str, feature: str) -> dict[s
     except SessionError as exc:
         raise ToolError(str(exc)) from exc
 
-    frame = _BUILDERS[feature](panel)
-    col = frame[feature]
-    n_non_null = int(col.len() - col.null_count())
+    col = feature_column(feature)
+    frame = _BUILDERS[feature](panel.frame)
+    if col not in frame.columns:
+        # Belt and braces on _FEATURE_COLUMNS: a builder renamed without the
+        # map being updated fails HERE, with the two names in the message,
+        # rather than as a KeyError three frames down in run_backtest.
+        raise ToolError(
+            f"{feature} did not produce column {col!r}. Produced: "
+            f"{', '.join(frame.columns)}. _FEATURE_COLUMNS is out of step with "
+            "features/library.py."
+        )
+
+    series = frame[col]
+    n_non_null = int(series.len() - series.null_count())
     if n_non_null == 0:
         raise ToolError(
             f"{feature} produced no values on this panel. It needs more history per "
-            f"ticker than the {len(panel['ts'].unique())} trading days available."
+            f"ticker than the {len(panel.frame['ts'].unique())} trading days available."
         )
 
-    scored = frame.drop_nulls(feature)
+    scored = frame.drop_nulls(col)
     summary = {
         "feature": feature,
+        "feature_column": col,
+        "universe": panel.universe,
         "n_rows": len(frame),
         "n_non_null": n_non_null,
         "n_tickers_with_values": scored["ticker"].n_unique(),
         "first_date_with_values": str(scored["ts"].min()),
     }
-    return {"handle": session.put("feature", frame, summary), **summary}
+    out = Panel(frame=frame, universe=panel.universe, membership=panel.membership)
+    return {"handle": session.put("feature", out, summary), **summary}
 
 
 def run_backtest(
@@ -485,11 +638,35 @@ def run_backtest(
     except SessionError as exc:
         raise ToolError(str(exc)) from exc
 
-    frame, col = art.payload, art.summary["feature"]
+    panel = art.payload
+    frame, col = panel.frame, art.summary["feature_column"]
 
     signal = frame.select(["ts", "ticker", pl.col(col).alias("sig")]).drop_nulls("sig")
     if signal.is_empty():
         raise ToolError(f"{col} scores no dates; cannot rank a cross-section.")
+
+    n_signal_rows = len(signal)
+
+    # THE UNIVERSE MASK, APPLIED TO THE SIGNAL IMMEDIATELY BEFORE RANKING.
+    #
+    # The position in the pipeline is the whole point. Bucket edges must come
+    # from the names that were investable that day. Filtering AFTER ranking
+    # leaves the deciles defined by a universe the strategy could not have
+    # traded — a name that was not in the index still pushes a real holding out
+    # of the top bucket — and the output still looks exactly like a backtest.
+    # There is no number in the result that would reveal the difference, which
+    # is why this is enforced here rather than left to the caller.
+    if panel.universe == "point_in_time":
+        if panel.membership is None:
+            raise ToolError(
+                "point_in_time panel carries no membership frame; refetch the data."
+            )
+        signal = restrict_to_members(signal, panel.membership)
+        if signal.is_empty():
+            raise ToolError(
+                "no scored row survives the point-in-time membership mask. The scored "
+                "dates and the snapshot dates do not overlap."
+            )
 
     rebal = pl.DataFrame({"ts": month_end_dates(signal["ts"])})
     targets = decile_weights(signal.join(rebal, on="ts", how="semi"), n_buckets, long_short)
@@ -510,7 +687,11 @@ def run_backtest(
 
     summary = {
         **{k: round(v, 6) for k, v in m.summary(invested["ret"]).items()},
-        "feature": col,
+        "feature": art.summary["feature"],
+        "feature_column": col,
+        "universe": panel.universe,
+        "n_scored_rows": n_signal_rows,
+        "n_investable_rows": len(signal),
         "n_buckets": n_buckets,
         "long_short": long_short,
         "cost_bps": cost_bps,

@@ -11,8 +11,9 @@ import polars as pl
 import psycopg
 
 from falsify.config import settings
+from falsify.data.pit_universe import SNAPSHOT_SCHEMA
 
-BAR_COLUMNS = ["ticker", "ts", "open", "high", "low", "close", "volume", "vwap", "n_trades"]
+BAR_COLUMNS =["ticker", "ts", "open", "high", "low", "close", "volume", "vwap", "n_trades"]
 
 _SCHEMA = {
     "ticker": pl.Utf8,
@@ -76,6 +77,40 @@ def load_prices(
 ) -> pl.DataFrame:
     """(ticker, ts, close) only: the minimum the engine requires."""
     return load_panel(tickers, start, end, dsn).select(["ticker", "ts", "close"])
+
+
+def load_snapshots(
+    index_name: str = "SP500",
+    dsn: str | None = None,
+) -> pl.DataFrame:
+    """Read `universe_snapshot` into the frame `pit_universe` consumes.
+
+    Args:
+        index_name: which index's snapshots to load.
+        dsn: override the connection string.
+
+    Returns:
+        Frame (ticker, index_name, as_of) in `pit_universe.SNAPSHOT_SCHEMA`,
+        sorted by (as_of, ticker). Empty frame of the right schema when the
+        table holds nothing for this index.
+
+    THE NUMBER OF DISTINCT `as_of` VALUES IS THE THING TO CHECK, and the caller
+    is expected to. `run_ingest.py` writes exactly ONE snapshot, dated the day
+    it ran. A membership panel built from a single snapshot never changes, so
+    it reproduces today's constituent list for every historical date — with
+    full coverage, no gap, and a survivorship audit that measures zero. It
+    fails by looking healthy, which is why `agent.tools.fetch_data` refuses
+    `point_in_time` on it rather than proceeding.
+    """
+    sql = """
+        SELECT ticker, index_name, as_of FROM universe_snapshot
+        WHERE index_name = %s ORDER BY as_of, ticker
+    """
+    with psycopg.connect(dsn or settings.db_dsn) as conn:
+        rows = conn.execute(sql, (index_name,)).fetchall()
+    if not rows:
+        return pl.DataFrame(schema=SNAPSHOT_SCHEMA)
+    return pl.DataFrame(rows, schema=SNAPSHOT_SCHEMA, orient="row")
 
 
 def coverage(dsn: str | None = None) -> pl.DataFrame:

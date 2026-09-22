@@ -111,3 +111,77 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_research_note_eval_key
 
 CREATE INDEX IF NOT EXISTS idx_research_note_publishable
     ON research_note (publishable, created_at DESC);
+
+-- Eval verdicts — Module 6.
+--
+-- THE KEY IS THE DESIGN DECISION. A verdict is not a property of an anomaly,
+-- it is a property of an anomaly RUN ON A UNIVERSE. Momentum scores
+-- differently on today's constituent list than on point-in-time membership —
+-- that difference is the project's headline finding — so both rows must
+-- coexist. Keying on eval_key alone would make the second run silently
+-- overwrite the first, and the survivorship comparison would come back as a
+-- single row and look perfectly fine.
+--
+-- registry_sha and scoring_rule_version sit on EVERY row. Together they say
+-- "this prediction, judged by this rule". Neither alone would reveal that two
+-- rows in the same table had been held to different standards, which is
+-- exactly what happens when the registry is edited between runs.
+-- scripts/run_evals.py --check exits non-zero rather than quoting a table
+-- containing a stale sha.
+--
+-- reasons is stored, not just the verdict. Module 7 renders the reasons; a
+-- bare count of passes is a number nobody can act on, and it is also how an
+-- eval suite turns into a highlight reel.
+--
+-- WARNING, learned by injection while building this module and worth more than
+-- the table itself: CREATE TABLE IF NOT EXISTS IS A NO-OP AGAINST AN EXISTING
+-- TABLE. Any edit to this file after the first `docker compose up` is silently
+-- ignored on that database, forever, while every read and write keeps
+-- succeeding. Dropping `universe` from the primary key below changed this
+-- string and nothing else, and the injected bug was the one the suite missed
+-- on its first pass. src/falsify/eval/store.primary_key_columns() now reads
+-- the key from pg_index ON THE LIVE SERVER, and a test asserts it — the
+-- invariant is checked against the database, not against the string that was
+-- supposed to create it.
+--
+-- Mirrored in src/falsify/eval/store.SCHEMA_SQL; keep the two in step.
+CREATE TABLE IF NOT EXISTS eval_result (
+    eval_key             TEXT        NOT NULL,
+    -- 'current' or 'point_in_time'. Half the primary key; see above.
+    universe             TEXT        NOT NULL,
+    run_at               TIMESTAMPTZ NOT NULL,
+    -- sha256 of the PREDICTED registry fields only. Prose is excluded, so
+    -- fixing a citation typo does not invalidate stored verdicts.
+    registry_sha         TEXT        NOT NULL,
+    scoring_rule_version INTEGER     NOT NULL,
+    -- pass | partial | fail | insufficient_data. Four, not three:
+    -- insufficient_data is not a refutation, and collapsing the two would let
+    -- a short sample manufacture rejections.
+    verdict              TEXT        NOT NULL,
+    reasons              JSONB       NOT NULL,
+    -- +1 if the paper predicts the top bucket wins, -1 the bottom. Three of
+    -- the six predict -1, so this is the load-bearing field.
+    direction            INTEGER     NOT NULL,
+    -- Signed as measured, so a reader can reconcile it against the backtest.
+    realised_sharpe      DOUBLE PRECISION,
+    -- realised * direction. This is what the verdict was computed from.
+    oriented_sharpe      DOUBLE PRECISION,
+    -- Reference level, never a target.
+    published_sharpe     DOUBLE PRECISION NOT NULL,
+    p_value              DOUBLE PRECISION,
+    p_value_adjusted     DOUBLE PRECISION,
+    deflated_psr         DOUBLE PRECISION,
+    n_invested_days      INTEGER     NOT NULL,
+    history_days         INTEGER     NOT NULL,
+    min_history_days     INTEGER     NOT NULL,
+    n_trials             INTEGER     NOT NULL,
+    -- The known gap between this implementation and the published one. An
+    -- anomaly that fails for a reason already known is a different finding
+    -- from one that fails on its merits.
+    caveat               TEXT        NOT NULL,
+    detail               JSONB       NOT NULL,
+    PRIMARY KEY (eval_key, universe)
+);
+
+CREATE INDEX IF NOT EXISTS idx_eval_result_verdict
+    ON eval_result (verdict, universe);

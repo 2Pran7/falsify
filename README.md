@@ -16,11 +16,13 @@ worth solving is building one that refuses to.
 | Statistics | Walk-forward splits, deflated Sharpe, FDR correction, survivorship audit | Complete, 111 tests |
 | Agent | Model-driven hypothesis to experiment to research note, four tools, five cost guards | Complete |
 | Research notes | Verified notes persisted to Postgres, publishable rule, markdown rendering | Complete |
-| Eval suite | Six published anomalies rediscovered, scored, failures shown | Planned |
+| Eval suite | Six published anomalies, pre-registered and hashed; four-rule scoring; universe argument | Harness complete, 120 tests. **Results blocked on a longer panel** |
 | Demo | Pre-computed eval-suite results served as a static page | Planned |
 
-Full suite: **381 passing, 19 skipped** on a fresh clone with no database;
-**397 passing, 3 skipped** with Postgres up.
+Full suite: **486 passing, 34 skipped** on a fresh clone with no database;
+**517 passing, 3 skipped** with Postgres up. Every new suite from Module 3
+onward was validated by injecting the bug it claims to catch; Module 6 ran
+eighteen injections and catches all eighteen.
 
 **The headline result.** Reconstructing point-in-time S&P 500 membership from
 the git history of the constituents CSV — 191 dated snapshots back to 2012, no
@@ -127,8 +129,23 @@ Disclosed rather than hidden, and quantified in the survivorship audit:
   repo is a **price return**, not a total return, and the Ken French UMD
   comparison is not like-for-like.
 - **`TRIAL_VARIANCE = 0.0009` is an assumed value, not a measured one**, and
-  every deflated figure moves with it. It is printed under every table rather
-  than buried, and is measured from the six anomalies in the eval-suite module.
+  every deflated figure moves with it. `scripts/run_evals.py` now prints the
+  assumption and the value measured from the suite's own six trials **side by
+  side, and does not substitute one for the other**: replacing a labelled
+  assumption with an unlabelled six-point estimate would be invisible in every
+  number downstream of it.
+- **The eval-suite RESULTS are not yet results.** The harness runs; the panel
+  under it is roughly two years of one up market, of which the first year is
+  momentum warmup. Six anomalies on ~250 invested days of a single regime
+  cannot support a published claim, and the suite is built to say so —
+  `insufficient_data` is a separate outcome from `fail` — rather than to fill
+  the table. Nothing in `eval_result` is quotable until the panel lengthens.
+- **The quality gate is still not point-in-time.** `drop_suspect_tickers`
+  decides exclusions over the whole panel at once, so a splice detected in 2026
+  removes that ticker from a 2025 backtest too. That is future information
+  shaping the universe: the same class of bias `stats/survivorship.py` exists to
+  measure, appearing in the tool written to prevent a different one. Verified by
+  test and recorded in every stored note.
 - **There is no benchmark tool**, so a long-only result's market beta cannot be
   separated out. A long-only Sharpe is not a test of a cross-sectional
   hypothesis; the long/short spread is.
@@ -162,12 +179,104 @@ src/falsify/
   notes/schema.py           the Note record and the publishable rule
   notes/store.py            notes in Postgres, failures kept as failures
   notes/render.py           Note -> markdown, table from data and prose as commentary
+  eval/registry.py          the pre-registration: six anomalies, frozen and hashed
+  eval/score.py             pass / partial / fail / insufficient_data, with reasons
+  eval/runner.py            the suite, run through the same tools the agent uses
+  eval/store.py             verdicts in Postgres, keyed by (anomaly, universe)
 scripts/validate_stats.py   the statistics re-derived by simulation, not unit test
 scripts/run_agent.py        one hypothesis end to end; prints and stores what it cost
 scripts/show_notes.py       read notes back with no API key and no spend
+scripts/run_evals.py        the eval suite: --compare, --check, --store, --registry
+scripts/diagnose_membership.py  why every ticker shows 374 member-days
 tests/                      synthetic data with hand-computed expected values
-db/schema.sql               daily_bars, universe_snapshot, ingest_log, research_note
+db/schema.sql               daily_bars, universe_snapshot, ingest_log, research_note,
+                            eval_result
 ```
+
+## The eval suite
+
+The project's central claim is that this pipeline rediscovers published effects
+and says so honestly when it does not. Module 6 makes that a checkable table
+rather than a sentence here.
+
+```
+python scripts/run_evals.py --registry    # the pre-registration and its hash
+python scripts/run_evals.py --compare     # both universes, gap per anomaly
+python scripts/run_evals.py --check       # CI gate; exits non-zero on stale rows
+```
+
+No API key and no spend: the suite runs the pipeline, not the model. Putting a
+language model in the loop would make a failing row unattributable between the
+data and the model's choices.
+
+**The predictions are fixed before the runs and hashed.** `eval/registry.py`
+pins the feature, the expected direction, the published Sharpe and the history
+each anomaly needs; `registry_digest()` hashes exactly those fields and every
+stored verdict carries it, so *"we did not edit the expectation after seeing the
+result"* is a string comparison rather than a promise. Prose fields are
+deliberately excluded — a typo fixed in a citation must not invalidate stored
+results, or nobody would ever fix one.
+
+| key | citation | feature | dir | published SR | needs |
+|---|---|---|---|---|---|
+| `momentum_12_1` | Jegadeesh & Titman (1993) | `mom_12_1` | +1 | 0.50 | 252d |
+| `short_term_reversal` | Jegadeesh (1990) | `ret_21d` | −1 | 0.35 | 21d |
+| `long_term_reversal` | De Bondt & Thaler (1985) | `rev_36_12` | −1 | 0.20 | 756d |
+| `low_volatility` | Ang, Hodrick, Xing & Zhang (2006) | `vol_63d` | −1 | 0.78 | 63d |
+| `idiosyncratic_volatility` | Ang et al. (2006) | `ivol_63d` | −1 | 0.60 | 63d |
+| `fifty_two_week_high` | George & Hwang (2004) | `pct_52w_high` | +1 | 0.55 | 252d |
+
+**Direction is the load-bearing field.** `run_backtest` always goes long the top
+bucket and short the bottom, so its Sharpe is the sign of the spread — and four
+of these six predict that spread to be *negative*. Without a sign fixed in
+advance, "the spread was −0.6" is unscoreable, and the temptation is to look at
+the number and then decide which way the paper said it should run.
+
+**The rule: sign, then deflation, then multiplicity. Magnitude is reported,
+never gated — except downward.** A spread more than 3× the published reference
+downgrades a pass to partial, because on a short sample a number that large is
+likelier a defect than a discovery, and an eval suite that cannot be embarrassed
+by its own best result is not measuring anything.
+
+**Four outcomes, not three.** `insufficient_data` is separate from `fail`: an
+anomaly needing three years of history on a two-year panel has not been refuted,
+it has not been tested. Untestable anomalies are excluded from the
+Benjamini-Hochberg correction rather than counted as nulls, because padding the
+denominator would make the survivors look better for no reason.
+
+Every published Sharpe is a **reference level, not a target**, and records where
+it came from; every anomaly records the **known gap between this implementation
+and the published one**, printed beside its verdict. An anomaly that fails for a
+reason already known is a different finding from one that fails on its merits.
+
+## Point-in-time universes
+
+`fetch_data(universe="current" | "point_in_time")`. Before Module 6 there was no
+such argument: every agent run loaded the current constituent list and was
+therefore survivorship-inflated, while `stats/survivorship.py` — the module that
+measures exactly that — was reachable only from a script. The project's headline
+finding and its headline artifact did not touch. They do now, and
+`run_evals.py --compare` generalises the momentum measurement to all six
+anomalies.
+
+Two implementation decisions are the whole of it, and in both cases the
+plausible alternative silently produces a wrong number:
+
+- **The mask restricts what may be HELD, never what the features may SEE.** A
+  company that joined the index in March had a price history in February, and
+  its 12-month momentum on the day it joined is a real, knowable number.
+  Filtering the price frame to member-days would leave every entrant unscored
+  for a year: a lookahead bug in reverse.
+- **It is applied to the signal immediately BEFORE ranking.** Bucket edges must
+  come from the names investable that day. Filtering after the sort leaves the
+  deciles defined by a universe the strategy could not have traded, and the
+  output still looks exactly like a backtest.
+
+`point_in_time` **refuses to run on a single snapshot date**, which is the state
+`run_ingest.py` leaves behind on its own. Membership that never changes is
+today's membership: it reproduces the current-constituents result exactly, with
+full coverage, no gap, and a survivorship audit that measures zero. It is the
+failure mode that fails by looking healthy.
 
 ## Research notes
 
