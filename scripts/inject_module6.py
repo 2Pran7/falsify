@@ -163,6 +163,11 @@ INJECTIONS = [
 ]
 
 
+def _as(text: str, newline: bytes) -> bytes:
+    """Encode a pattern using the line ending the target file actually uses."""
+    return text.encode().replace(b"\r\n", b"\n").replace(b"\n", newline)
+
+
 def guard() -> str | None:
     """Refuse to run unless the working tree is clean. Returns an error, or None.
 
@@ -216,17 +221,39 @@ def main() -> int:
     missed = []
     for i, (label, rel, old, new, target) in enumerate(INJECTIONS, 1):
         path = ROOT / rel
-        # BINARY, NOT TEXT. `read_text`/`write_text` open in text mode, which on
-        # Windows translates \n to \r\n on the way out. The content reverts
-        # perfectly and every line ending changes, so a clean tree comes back
-        # dirty in six files and the final guard cries wolf. Found on the first
-        # real run; the bytes in must be the bytes out.
+        # BINARY IN, BINARY OUT, AND THE PATTERN ADAPTED TO THE FILE.
+        #
+        # Two line-ending bugs were paid for here, one after the other, and they
+        # pull in opposite directions.
+        #
+        # First: `read_text`/`write_text` open in TEXT mode, which on Windows
+        # writes \n back out as \r\n. The content reverted perfectly and every
+        # line ending changed, so a clean tree came back dirty in six files and
+        # the final guard cried wolf about its own edit. Hence read_bytes and
+        # write_bytes: the bytes in must be the bytes out.
+        #
+        # Second, and only visible once the first was fixed: a byte comparison
+        # is line-ending SENSITIVE. The patterns below are written with \n, and
+        # a checked-out file on Windows holds \r\n, so every MULTI-LINE pattern
+        # silently stopped matching and six injections reported PATTERN NOT
+        # FOUND. Single-line patterns kept working, which is exactly the sort of
+        # partial failure that looks like a bad pattern rather than a bad
+        # matcher.
+        #
+        # So the pattern is translated into whatever the file actually uses,
+        # with the other convention as a fallback for a mixed file. A
+        # PATTERN NOT FOUND now means the source really has changed.
         original = path.read_bytes()
-        if old.encode() not in original:
+        newline = b"\r\n" if b"\r\n" in original else b"\n"
+        old_b, new_b = _as(old, newline), _as(new, newline)
+        if old_b not in original:
+            other = b"\n" if newline == b"\r\n" else b"\r\n"
+            old_b, new_b = _as(old, other), _as(new, other)
+        if old_b not in original:
             print(f"{i:>3}  {label:58s} PATTERN NOT FOUND")
             missed.append(label)
             continue
-        patched = original.replace(old.encode(), new.encode(), 1)
+        patched = original.replace(old_b, new_b, 1)
         assert patched != original, "edit was a no-op"
         path.write_bytes(patched)
         try:
