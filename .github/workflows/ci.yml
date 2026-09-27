@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: falsify
+          POSTGRES_PASSWORD: falsify_dev
+          POSTGRES_DB: falsify
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U falsify"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://falsify:falsify_dev@localhost:5432/falsify
+      POLYGON_API_KEY: ci-no-network
+      PGPASSWORD: falsify_dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt && pip install -e .
+      - name: Apply schema (the Docker init path, run by hand)
+        run: psql -h localhost -U falsify -d falsify -v ON_ERROR_STOP=1 -f db/schema.sql
+      - name: Tests
+        run: pytest -q
+      - name: Statistics validated by simulation
+        run: python scripts/validate_stats.py
+      # A test that has never failed has not been shown to work. These edit
+      # source in place and revert; CI's checkout is clean, which they require.
+      - name: Injection audit, Module 6
+        run: python scripts/inject_module6.py
+      - name: Injection audit, Module 7
+        run: python scripts/inject_module7.py
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      # Fails if data/demo.json is absent: the site never falls back to a sample.
+      - run: npm run build

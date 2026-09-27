@@ -1,4 +1,4 @@
-"""Injection audit for Module 6: eighteen bugs, deliberately introduced.
+"""Injection audit for Module 6: nineteen bugs, deliberately introduced.
 
 Usage
 -----

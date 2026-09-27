@@ -16,6 +16,7 @@ from falsify.data.quality import (
     drop_suspect_tickers,
     flag_suspect_tickers,
     level_shifts,
+    truncate_suspect_tickers,
 )
 
 D0 = dt.date(2024, 1, 1)
@@ -110,3 +111,97 @@ def test_clean_panel_reports_nothing_and_keeps_its_schema():
     assert flagged.is_empty()
     assert flagged.schema["reason"] == pl.Utf8
     assert clean.equals(panel)
+
+
+# --- Module 7: the point-in-time gate ---------------------------------------
+
+
+def test_truncation_keeps_history_before_the_first_defect():
+    """BNY's fund history is genuine and stays; the bank after the hole goes."""
+    panel = _panel(
+        {
+            "GOOD": [(0, 100.0), (1, 101.0), (2, 99.0)],
+            "BNY": [(0, 10.30), (1, 10.25), (2, 10.20), (105, 138.98), (106, 139.40)],
+        }
+    )
+    clean, report = truncate_suspect_tickers(panel)
+
+    bny = clean.filter(pl.col("ticker") == "BNY")
+    assert bny["close"].to_list() == [10.30, 10.25, 10.20]
+    assert clean.filter(pl.col("ticker") == "GOOD").height == 3
+    assert report["ticker"].to_list() == ["BNY"]
+    assert report["last_kept"][0] == D0 + dt.timedelta(days=2)
+    assert report["rows_dropped"][0] == 2
+
+
+def test_truncation_never_forms_the_return_across_the_join():
+    """The last kept close is the OLD security's; the first dropped is the new
+    one's. The 13x return between them must not survive in any form."""
+    panel = _panel({"X": [(0, 10.0), (1, 10.0), (2, 50.0), (3, 51.0)]})
+    clean, _ = truncate_suspect_tickers(panel)
+    closes = clean["close"].to_list()
+    assert closes == [10.0, 10.0]
+    assert max(b / a for a, b in zip(closes, closes[1:])) < 4.0
+
+
+def test_truncation_cuts_at_the_first_of_several_defects():
+    panel = _panel(
+        {"Z": [(0, 10.0), (1, 10.0), (30, 10.5), (31, 10.6), (32, 60.0), (33, 60.0)]}
+    )
+    clean, report = truncate_suspect_tickers(panel)
+    assert clean.height == 2
+    assert report["reason"][0] == "coverage_gap"
+    assert report["rows_dropped"][0] == 4
+
+
+def test_truncation_leaves_genuine_large_moves_alone():
+    """A 3x takeover pop is real and must not cost the ticker any history."""
+    panel = _panel({"TGT": [(0, 20.0), (1, 60.0), (2, 61.0)]})
+    clean, report = truncate_suspect_tickers(panel)
+    assert clean.equals(panel)
+    assert report.is_empty()
+
+
+def test_truncation_on_a_clean_panel_is_the_identity_with_a_typed_report():
+    panel = _panel({"AAA": [(0, 100.0), (1, 101.0)], "BBB": [(0, 50.0), (1, 49.0)]})
+    clean, report = truncate_suspect_tickers(panel)
+    assert clean.equals(panel)
+    assert report.is_empty()
+    assert report.schema["last_kept"] == pl.Date
+    assert report.schema["rows_dropped"] == pl.UInt32
+
+
+def _cut(df: pl.DataFrame, t: dt.date) -> pl.DataFrame:
+    return df.filter(pl.col("ts") <= t).sort(["ticker", "ts"])
+
+
+def test_truncation_is_point_in_time():
+    """THE property. For every date T, gating the panel as it stood at T gives
+    exactly what the full-panel gate keeps up to T. If it did not, something
+    after T changed the universe at T, which is lookahead by definition."""
+    panel = _panel(
+        {
+            "GOOD": [(d, 100.0 + d) for d in range(0, 60)],
+            "BNY": [(d, 10.0) for d in range(0, 10)] + [(d, 139.0) for d in range(40, 60)],
+            "JMP": [(d, 20.0) for d in range(0, 25)] + [(d, 95.0) for d in range(25, 60)],
+        }
+    )
+    full, _ = truncate_suspect_tickers(panel)
+    for t in panel["ts"].unique().sort().to_list():
+        at_t, _ = truncate_suspect_tickers(panel.filter(pl.col("ts") <= t))
+        assert _cut(at_t, t).equals(_cut(full, t)), f"lookahead at {t}"
+
+
+def test_the_whole_sample_gate_fails_the_same_property():
+    """The control. If this ever passes, the property test above is not
+    discriminating and has not been shown to work."""
+    panel = _panel(
+        {
+            "GOOD": [(d, 100.0) for d in range(0, 30)],
+            "JMP": [(d, 20.0) for d in range(0, 15)] + [(d, 95.0) for d in range(15, 30)],
+        }
+    )
+    full, _ = drop_suspect_tickers(panel)
+    t = D0 + dt.timedelta(days=10)
+    at_t, _ = drop_suspect_tickers(panel.filter(pl.col("ts") <= t))
+    assert not _cut(at_t, t).equals(_cut(full, t))

@@ -11,6 +11,8 @@ Usage
     python scripts/run_survivorship.py
     python scripts/run_survivorship.py --since 2024-09-01
     python scripts/run_survivorship.py --force      # ignore the coverage gate
+    python scripts/run_survivorship.py --save web/data/survivorship.json
+    python scripts/run_survivorship.py --whole-sample-gate   # reproduce Module 3
 
 Three design decisions worth being able to defend:
 
@@ -29,6 +31,10 @@ Three design decisions worth being able to defend:
    prices, block the run.
 
 2. **The quality gate runs ONCE, on the combined universe, before the split.**
+   Since Module 7 it is the POINT-IN-TIME gate (`truncate_suspect_tickers`):
+   a spliced ticker keeps its genuine history up to the splice and loses only
+   what follows. `--whole-sample-gate` restores the Module 3 behaviour, which
+   removed the ticker from every date, so the 13 Sep figures can be reproduced.
    Running it separately per universe could exclude different tickers from each
    run, and the measured gap would then be part survivorship and part
    data-cleaning. One gate, applied identically, leaves membership as the only
@@ -64,7 +70,7 @@ from falsify.backtest import metrics as m
 from falsify.backtest.engine import BacktestConfig, run_backtest
 from falsify.backtest.loader import load_panel
 from falsify.data.pit_universe import members_as_of, membership_panel, parse_snapshots
-from falsify.data.quality import drop_suspect_tickers
+from falsify.data.quality import drop_suspect_tickers, truncate_suspect_tickers
 from falsify.stats.survivorship import coverage_report, survivorship_gap
 
 DEFAULT_SINCE = dt.date(2024, 9, 1)
@@ -149,6 +155,10 @@ def main() -> None:
                     help="ignore index snapshots before this date (YYYY-MM-DD)")
     ap.add_argument("--force", action="store_true",
                     help="print the gap even when price coverage is incomplete")
+    ap.add_argument("--whole-sample-gate", action="store_true",
+                    help="Module 3's gate: drop a suspect ticker from EVERY date (lookahead)")
+    ap.add_argument("--save", metavar="PATH",
+                    help="write the gap as JSON for the demo (scripts/export_demo.py reads it)")
     args = ap.parse_args()
 
     panel = load_panel()
@@ -222,11 +232,13 @@ def main() -> None:
         print("\n  --force: reporting anyway. THIS NUMBER UNDER-MEASURES THE BIAS.")
 
     # --- one quality gate, applied to both runs -----------------------------
-    universe, excluded = drop_suspect_tickers(universe)
-    if not excluded.is_empty():
-        print(f"\nquality gate excluded {excluded.height} ticker(s) from BOTH runs:")
-        for r in excluded.iter_rows(named=True):
-            print(f"  {r['ticker']:<6} {r['reason']:<14} {r['detail']}")
+    gate_name = "whole_sample" if args.whole_sample_gate else "point_in_time"
+    gate = drop_suspect_tickers if args.whole_sample_gate else truncate_suspect_tickers
+    universe, excluded = gate(universe)
+    verb = "excluded" if args.whole_sample_gate else "truncated at first defect"
+    print(f"\nquality gate ({gate_name}): {excluded.height} ticker(s) {verb}, BOTH runs")
+    for r in excluded.iter_rows(named=True):
+        print(f"  {r['ticker']:<6} {r['reason']:<14} {r['detail']}")
 
     biased_panel = universe.filter(pl.col("ticker").is_in(list(current_members)))
 
@@ -277,6 +289,39 @@ def main() -> None:
         "  return is missing from the point-in-time run too. The true bias is larger.\n"
         "  DIAGNOSTIC ONLY on this window — publishable after the M6 backfill."
     )
+
+    if args.save:
+        _save(args.save, gap, common, gate_name, excluded, args.force, blocked)
+
+
+def _save(path, gap, common, gate_name, excluded, forced, blocked) -> None:
+    """The gap as JSON, for the demo page.
+
+    The page shows this figure beside the eval table, and a number on that page
+    must come from a file the pipeline wrote rather than from a sentence someone
+    typed. The run's own caveats travel with it: which gate, whether --force was
+    needed, and the bound it is.
+    """
+    import json
+    import pathlib
+
+    out = {
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "window": {
+            "first": str(common["ts"].min()),
+            "last": str(common["ts"].max()),
+            "invested_days": common.height,
+        },
+        "gate": gate_name,
+        "n_tickers_gated": excluded.height,
+        "forced_past_coverage_gate": bool(forced and blocked),
+        "bound": "lower",
+        "metrics": {k: float(v) for k, v in gap.items()},
+    }
+    p = pathlib.Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+    print(f"\n  saved -> {p}")
 
 
 if __name__ == "__main__":

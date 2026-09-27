@@ -17,15 +17,16 @@ worth solving is building one that refuses to.
 | Agent | Model-driven hypothesis to experiment to research note, four tools, five cost guards | Complete |
 | Research notes | Verified notes persisted to Postgres, publishable rule, markdown rendering | Complete |
 | Eval suite | Six published anomalies, pre-registered and hashed; four-rule scoring; universe argument | Harness complete, 120 tests. **Results blocked on a longer panel** |
-| Demo | Pre-computed eval-suite results served as a static page | Planned |
+| Demo | Frozen eval verdicts and research notes, served as a static Next.js page; point-in-time splice gate | Complete, 28 tests, 12 injections |
 
-Full suite: **486 passing, 34 skipped** on a fresh clone with no database;
-**517 passing, 3 skipped** with Postgres up. Every new suite from Module 3
-onward was validated by injecting the bug it claims to catch; Module 6 ran
-eighteen injections and catches all eighteen.
+Full suite: **519 passing, 34 skipped** on a fresh clone with no database;
+**550 passing, 3 skipped** with Postgres up (the three need ingested SPY
+prices). Every new suite from Module 3 onward was validated by injecting the
+bug it claims to catch: `scripts/inject_module6.py` catches 19 of 19 and
+`scripts/inject_module7.py` 12 of 12, and CI runs both on every push.
 
 **The headline result.** Reconstructing point-in-time S&P 500 membership from
-the git history of the constituents CSV — 191 dated snapshots back to 2012, no
+the git history of the constituents CSV — 193 dated snapshots back to 2012, no
 paid data and no API calls — shows that **survivorship bias accounted for
 roughly half the headline momentum return**: 20.18% against 10.02% over a
 common 239-day invested window, Sharpe 0.68 against 0.45. Volatility and max
@@ -51,14 +52,18 @@ the codebase are both in `data/quality.py`, where they look one bar ahead to
 measure a coverage gap and a price level shift. Neither ever reaches a return
 series.
 
-**The one lookahead that is disclosed rather than removed.** `quality.py`
-decides which tickers to exclude from the whole sample at once, so a splice
-detected in 2026 removes that ticker from a 2025 backtest too. That is future
-information shaping the universe. It is kept because the alternative is worse:
-trading a fictitious price produced by two different companies spliced end to
-end. The bias direction is toward cleanliness, not toward returns, and a
-point-in-time gate that excludes a ticker only from the date its defect becomes
-detectable is the correct fix. Scheduled for the eval-suite module.
+**The splice gate is point-in-time.** A vendor ticker can be reassigned to a
+different company, and a naive series then splices two securities end to end.
+Until Module 7 the gate that caught this decided over the whole panel at once,
+so a splice detected in 2026 removed that ticker from a 2025 backtest too:
+future information shaping the universe. `truncate_suspect_tickers` now keeps
+a ticker's genuine history up to its first defect and drops only what follows,
+and the property is a test rather than a claim: gating the panel as it stood
+on any date T gives exactly what the full-panel gate keeps up to T. A control
+test shows the old gate failing the same property. It is applied inside
+`agent/tools.fetch_data`, so the agent and the eval suite both see it; before
+Module 7 that path had no splice gate at all. `--whole-sample-gate` on the two
+Module 3 scripts reproduces the original figures.
 
 **The model decides, and that is enforced rather than asserted.** Four
 mechanisms, in increasing order of strength: the tool menu is closed (a dict of
@@ -97,7 +102,7 @@ docker compose up -d        # TimescaleDB; schema applies on first run
 Verify:
 
 ```bash
-pytest -q                                   # 43 tests, 46 once SPY is ingested
+pytest -q                                   # 550 passing, 3 more once SPY is ingested
 python scripts/run_ingest.py AAPL MSFT      # two-ticker smoke test
 
 docker exec -it falsify-db psql -U falsify -c \
@@ -140,12 +145,11 @@ Disclosed rather than hidden, and quantified in the survivorship audit:
   cannot support a published claim, and the suite is built to say so —
   `insufficient_data` is a separate outcome from `fail` — rather than to fill
   the table. Nothing in `eval_result` is quotable until the panel lengthens.
-- **The quality gate is still not point-in-time.** `drop_suspect_tickers`
-  decides exclusions over the whole panel at once, so a splice detected in 2026
-  removes that ticker from a 2025 backtest too. That is future information
-  shaping the universe: the same class of bias `stats/survivorship.py` exists to
-  measure, appearing in the tool written to prevent a different one. Verified by
-  test and recorded in every stored note.
+- **The splice gate truncates rather than re-keys.** The rows after a
+  ticker's first defect may be a genuine successor company, and they are
+  dropped rather than treated as a new instrument. That costs sample, not
+  correctness: it never reaches a return, because the return across the join is
+  the one that is never formed.
 - **There is no benchmark tool**, so a long-only result's market beta cannot be
   separated out. A long-only Sharpe is not a test of a cross-sectional
   hypothesis; the long/short spread is.
@@ -167,7 +171,7 @@ src/falsify/
   backtest/engine.py        weights to daily return series
   backtest/metrics.py       Sharpe, CAGR, volatility, drawdown
   data/pit_universe.py      point-in-time membership from the constituents git log
-  data/quality.py           splice and gap detection (NOT point-in-time; see above)
+  data/quality.py           splice and gap detection; the point-in-time gate
   stats/walkforward.py      walk-forward splits with no leakage across a boundary
   stats/deflated.py         PSR, E[max SR], deflated Sharpe, minimum track record
   stats/multipletest.py     Benjamini-Hochberg and Holm
@@ -183,6 +187,7 @@ src/falsify/
   eval/score.py             pass / partial / fail / insufficient_data, with reasons
   eval/runner.py            the suite, run through the same tools the agent uses
   eval/store.py             verdicts in Postgres, keyed by (anomaly, universe)
+  demo.py                   stored evidence -> one frozen JSON, refusing anything misleading
 scripts/validate_stats.py   the statistics re-derived by simulation, not unit test
 scripts/run_agent.py        one hypothesis end to end; prints and stores what it cost
 scripts/show_notes.py       read notes back with no API key and no spend
@@ -190,6 +195,9 @@ scripts/run_evals.py        the eval suite: --compare, --check, --store, --regis
 scripts/diagnose_membership.py  snapshot gaps, member-day clusters, membership resolution
 scripts/ingest_dropped.py   prices for the names that LEFT the index
 scripts/inject_module6.py   the nineteen-injection audit, re-runnable
+scripts/inject_module7.py   twelve more: the splice gate and every export refusal
+scripts/export_demo.py      Postgres -> web/data/demo.json for the static page
+web/                        Next.js static export; renders data/demo.json, computes nothing
 tests/                      synthetic data with hand-computed expected values
 db/schema.sql               daily_bars, universe_snapshot, ingest_log, research_note,
                             eval_result
@@ -307,6 +315,27 @@ runs the other way — a point-in-time member whose prices were never ingested
 contributes nothing, thinning the leg — and `scripts/ingest_dropped.py` exists
 to close that one, because unlike the first it is closeable. Neither error
 cancels the other, and both are stated wherever the survivorship number is.
+
+## Demo
+
+`web/` is a static Next.js site that renders one file, `web/data/demo.json`, and
+computes nothing: no model call, no database, no backtest. That file is written
+by `scripts/export_demo.py` from what Postgres holds, and the export **refuses**
+rather than warns when the result could mislead: a verdict scored against an
+edited registry, rows held to different scoring-rule versions, a table with a
+missing anomaly, or a survivorship figure produced with `--force`. It exports
+refused notes and failing verdicts with their reasons, because the page shows
+the reasons, not the tally.
+
+```
+python scripts/run_evals.py --compare --store
+python scripts/run_survivorship.py --save web/data/survivorship.json
+python scripts/export_demo.py --survivorship web/data/survivorship.json
+cd web && npm ci && npm run build      # static site in web/out
+```
+
+The build fails if `data/demo.json` is missing rather than falling back to a
+sample. Deployed on Vercel with `web` as the project root.
 
 ## Research notes
 

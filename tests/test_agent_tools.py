@@ -225,6 +225,34 @@ def test_fetch_data_summary_reports_shape(s, patched):
     assert out["first_date"] == "2024-01-01"
 
 
+def test_fetch_data_applies_the_point_in_time_splice_gate(s, monkeypatch):
+    """Module 7. Until then fetch_data applied no gate, and a reassigned ticker
+    reached features and returns. One ticker is spliced 5x on day 300: it must
+    keep its first 300 rows, lose the rest, and the digest must say so."""
+    base = _panel()
+    spliced = base.with_columns(
+        pl.when((pl.col("ticker") == "T03") & (pl.col("ts") >= base["ts"].unique().sort()[300]))
+        .then(pl.col("close") * 5.0)
+        .otherwise(pl.col("close"))
+        .alias("close")
+    )
+    monkeypatch.setattr(T, "load_panel", lambda *a, **k: spliced)
+    out = T.fetch_data(s)
+    frame = s.payload(out["handle"], "panel").frame
+
+    assert out["n_tickers_truncated"] == 1
+    assert out["n_rows_dropped_by_gate"] == 100
+    assert frame.filter(pl.col("ticker") == "T03").height == 300
+    assert out["n_rows"] == 4800 - 100
+
+
+def test_fetch_data_reports_a_clean_gate_as_zero_not_absent(s, patched):
+    """A missing key reads as "not checked"; zero reads as "checked, clean"."""
+    out = T.fetch_data(s)
+    assert out["n_tickers_truncated"] == 0
+    assert out["n_rows_dropped_by_gate"] == 0
+
+
 def test_the_panel_is_reachable_through_the_session(s, patched):
     """Module 6 wrapped the stored frame in a Panel, which carries the universe.
 

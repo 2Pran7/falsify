@@ -11,6 +11,7 @@ concerns of the statistics layer.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 
 sys.path.insert(0, "src")
@@ -26,7 +27,7 @@ from falsify.backtest.portfolio import (
     hold_until_next_rebalance,
     month_end_dates,
 )
-from falsify.data.quality import drop_suspect_tickers
+from falsify.data.quality import drop_suspect_tickers, truncate_suspect_tickers
 from falsify.features.library import add_momentum_12_1
 from falsify.stats.survivorship import restrict_to_members
 
@@ -125,6 +126,11 @@ def _monthly_curve(returns: pl.DataFrame) -> None:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--whole-sample-gate", action="store_true",
+                    help="Module 2's gate: drop a suspect ticker from EVERY date (lookahead)")
+    args = ap.parse_args()
+
     panel = load_panel()
     if panel.is_empty():
         print("daily_bars is empty. Run scripts/run_ingest.py first.")
@@ -136,9 +142,14 @@ def main() -> None:
         f"{len(universe):,} rows, {universe['ts'].min()} to {universe['ts'].max()}"
     )
 
-    universe, excluded = drop_suspect_tickers(universe)
+    if args.whole_sample_gate:
+        universe, excluded = drop_suspect_tickers(universe)
+        verb = "excluded from every date"
+    else:
+        universe, excluded = truncate_suspect_tickers(universe)
+        verb = "truncated at their first defect (point-in-time)"
     if not excluded.is_empty():
-        print(f"\nexcluded {excluded.height} ticker(s) failing the data-quality gate:")
+        print(f"\n{excluded.height} ticker(s) {verb}:")
         for r in excluded.iter_rows(named=True):
             print(f"  {r['ticker']:<6} {r['reason']:<14} {r['detail']}")
         print(f"universe after exclusions: {universe['ticker'].n_unique()} tickers")

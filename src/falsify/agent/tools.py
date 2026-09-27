@@ -45,6 +45,7 @@ from falsify.backtest.portfolio import (
     month_end_dates,
 )
 from falsify.data.pit_universe import membership_panel
+from falsify.data.quality import truncate_suspect_tickers
 from falsify.features import library as feat
 from falsify.stats import deflated
 from falsify.stats.survivorship import restrict_to_members
@@ -496,12 +497,21 @@ def fetch_data(
             "no rows matched. Check the tickers are ingested and the date range is covered."
         )
 
+    # THIRD, added at Module 7: the splice gate, point-in-time. Until then this
+    # tool applied no gate at all, so a reassigned ticker could reach a feature
+    # and a return. Applied before the membership mask is built and before any
+    # feature sees the frame, and reported in the digest, because an exclusion
+    # nobody is told about is a silent change to the universe.
+    frame, gated = truncate_suspect_tickers(frame)
+
     summary = {
         "n_rows": len(frame),
         "n_tickers": frame["ticker"].n_unique(),
         "first_date": str(frame["ts"].min()),
         "last_date": str(frame["ts"].max()),
         "universe": universe,
+        "n_tickers_truncated": gated.height,
+        "n_rows_dropped_by_gate": int(gated["rows_dropped"].sum()) if gated.height else 0,
     }
 
     membership = None

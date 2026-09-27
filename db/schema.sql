@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS eval_result (
     -- a short sample manufacture rejections.
     verdict              TEXT        NOT NULL,
     reasons              JSONB       NOT NULL,
-    -- +1 if the paper predicts the top bucket wins, -1 the bottom. Three of
+    -- +1 if the paper predicts the top bucket wins, -1 the bottom. Four of
     -- the six predict -1, so this is the load-bearing field.
     direction            INTEGER     NOT NULL,
     -- Signed as measured, so a reader can reconcile it against the backtest.
