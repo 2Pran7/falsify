@@ -1,7 +1,7 @@
 {
   "snapshot_version": 1,
-  "generated_at": "2026-09-27T23:03:11+00:00",
-  "code_commit": "261735d",
+  "generated_at": "2026-09-27T23:12:34+00:00",
+  "code_commit": "0829d1d",
   "registry_sha": "1b30d5d16a5dc15cebc9691c634a8f75535dbf355d9ee3d76d6a281d01c78b92",
   "scoring": {
     "rule_version": 1,
@@ -326,11 +326,175 @@
   },
   "notes": {
     "counts": {
-      "total": 3,
-      "publishable": 2,
+      "total": 4,
+      "publishable": 3,
       "unpublishable": 1
     },
     "items": [
+      {
+        "note_id": "46202bf3-7ce4-49af-a1d4-af2d3aee931e",
+        "eval_key": null,
+        "created_at": "2026-09-27T23:12:33.665401+00:00",
+        "hypothesis": "Do low-volatility stocks outperform, on point-in-time membership?",
+        "prose": "## Findings: Low-volatility effect on point-in-time S&P 500 membership\n\n**Setup:** Fetched the point-in-time universe (549 tickers, 2012-12-27 through 2026-09-03 snapshots, 268,050 rows). Computed three volatility-family features and ran dollar-neutral long/short decile spreads (10 buckets, monthly rebalance, 10 bps cost) \u2014 the correct test for this cross-sectional hypothesis, since long-only results would embed market beta that can't be isolated here.\n\n| Feature | Sharpe (annualised) | n_invested_days | prob_sharpe_above_zero | prob_beats_best_of_n_trials (deflated) |\n|---|---|---|---|---|\n| vol_21d (21d realized vol) | 1.057964 | 460 | 0.9226 | 0.8097 |\n| vol_63d (63d realized vol) | 1.342857 | 419 | 0.9572 | 0.8847 |\n| ivol_63d (63d idiosyncratic vol vs SPY) | 1.252554 | 419 | 0.9446 | 0.8594 |\n\nAll three backtests go long low-vol / short high-vol (that's what the tool's bucket sort with long_short=True does for a low-vol hypothesis \u2014 low decile long, high decile short), and all three post positive, superficially attractive Sharpe ratios in the 1.06\u20131.34 range.\n\n**But the deflated numbers say otherwise.** `prob_beats_best_of_n_trials` \u2014 the actual deflated-Sharpe metric, accounting for the 3 trials run in this session \u2014 comes in at 0.8097, 0.8847, and 0.8594. These are probabilities that the strategy's true Sharpe beats the best of 3 worthless comparison strategies, not confidence in the effect itself. The eval gate for confirming an effect is 0.95; none of the three clears it, though they are above the 0.5 \"coin-flip\" line, which the tool documentation explicitly says is *not* support.\n\nAdditionally, `min_track_record_length_days` \u2014 the sample length needed before the Sharpe could be statistically distinguished from zero given its volatility \u2014 is 614.3 days for vol_21d, 383.9 days for vol_63d, and 445.6 days for ivol_63d. The actual invested samples are only 460, 419, and 419 days respectively. Two of the three (vol_21d, ivol_63d... actually check: vol_63d's required 383.9 < observed 419, ivol's required 445.6 > observed 419, vol_21d's required 614.3 > observed 460) fall short of or barely clear the minimum track record needed, meaning the sample is too short relative to the volatility of the strategy's returns to have real confidence in the sign of the true Sharpe.\n\n**Conclusion:** The evidence is suggestive but not sufficient to confirm the low-volatility effect on this point-in-time sample. All three vol-based long/short spreads show positive raw Sharpe ratios, but once deflated for the 3 trials tried, none reaches the 0.95 confirmation bar (best is 0.8847 for vol_63d), and the track record (~419\u2013460 invested days) is close to or shorter than the minimum length needed to statistically distinguish the Sharpe from zero for two of the three variants. This looks like a promising but statistically unconfirmed signal over a fairly short (roughly 1.7-year) invested window \u2014 not a validated outperformance claim. A longer sample and/or fewer exploratory trials would be needed to make this conclusive.",
+        "publishable": true,
+        "unpublishable_reasons": [],
+        "backtests": [
+          {
+            "variant": "vol_21d, 10 buckets, long/short",
+            "metrics": {
+              "cagr": 0.291854,
+              "n_days": 460.0,
+              "sharpe": 1.057964,
+              "ann_vol": 0.278826,
+              "feature": "vol_21d",
+              "cost_bps": 10,
+              "universe": "point_in_time",
+              "n_buckets": 10,
+              "long_short": true,
+              "max_drawdown": -0.233734,
+              "total_return": 0.59591,
+              "n_scored_rows": 256529,
+              "feature_column": "vol_21d",
+              "n_names_traded": 477,
+              "n_invested_days": 460,
+              "n_investable_rows": 241079
+            },
+            "statistics": {
+              "skew": 0.0116,
+              "kurtosis": 7.7928,
+              "units_note": "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. prob_beats_best_of_n_trials is the deflated Sharpe: the probability this strategy's true Sharpe beats what the best of n_trials worthless strategies would have printed. Below 0.5 it is more likely than not that the result is no better than the best of the worthless strategies tried; confirming an effect takes 0.95, the eval suite's gate, and anything between is not support. Never tabulate these beside a Sharpe ratio as though they shared units.",
+              "n_trials_note": "n_trials_used=3 is the count AS OF THIS CALL. Running further backtests afterwards raises the honest count and makes this figure too generous. Call analyze_results again on every backtest after the last one has run, and report those numbers.",
+              "n_trials_used": 3,
+              "n_observations": 460,
+              "n_trials_observed": 3,
+              "sharpe_annualised": 1.058,
+              "sharpe_per_period": 0.066645,
+              "prob_sharpe_above_zero": 0.9226,
+              "trial_variance_assumption": 0.0009,
+              "prob_beats_best_of_n_trials": 0.8097,
+              "min_track_record_length_days": 614.3,
+              "expected_max_sharpe_from_luck": 0.025584
+            },
+            "analysis_error": null
+          },
+          {
+            "variant": "vol_63d, 10 buckets, long/short",
+            "metrics": {
+              "cagr": 0.445821,
+              "n_days": 419.0,
+              "sharpe": 1.342857,
+              "ann_vol": 0.310577,
+              "feature": "vol_63d",
+              "cost_bps": 10,
+              "universe": "point_in_time",
+              "n_buckets": 10,
+              "long_short": true,
+              "max_drawdown": -0.240068,
+              "total_return": 0.845959,
+              "n_scored_rows": 233553,
+              "feature_column": "vol_63d",
+              "n_names_traded": 355,
+              "n_invested_days": 419,
+              "n_investable_rows": 219792
+            },
+            "statistics": {
+              "skew": -0.0485,
+              "kurtosis": 5.8202,
+              "units_note": "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. prob_beats_best_of_n_trials is the deflated Sharpe: the probability this strategy's true Sharpe beats what the best of n_trials worthless strategies would have printed. Below 0.5 it is more likely than not that the result is no better than the best of the worthless strategies tried; confirming an effect takes 0.95, the eval suite's gate, and anything between is not support. Never tabulate these beside a Sharpe ratio as though they shared units.",
+              "n_trials_note": "n_trials_used=3 is the count AS OF THIS CALL. Running further backtests afterwards raises the honest count and makes this figure too generous. Call analyze_results again on every backtest after the last one has run, and report those numbers.",
+              "n_trials_used": 3,
+              "n_observations": 419,
+              "n_trials_observed": 3,
+              "sharpe_annualised": 1.3429,
+              "sharpe_per_period": 0.084592,
+              "prob_sharpe_above_zero": 0.9572,
+              "trial_variance_assumption": 0.0009,
+              "prob_beats_best_of_n_trials": 0.8847,
+              "min_track_record_length_days": 383.9,
+              "expected_max_sharpe_from_luck": 0.025584
+            },
+            "analysis_error": null
+          },
+          {
+            "variant": "ivol_63d, 10 buckets, long/short",
+            "metrics": {
+              "cagr": 0.320818,
+              "n_days": 419.0,
+              "sharpe": 1.252554,
+              "ann_vol": 0.246505,
+              "feature": "ivol_63d",
+              "cost_bps": 10,
+              "universe": "point_in_time",
+              "n_buckets": 10,
+              "long_short": true,
+              "max_drawdown": -0.218542,
+              "total_return": 0.588275,
+              "n_scored_rows": 232625,
+              "feature_column": "ivol_63d",
+              "n_names_traded": 378,
+              "n_invested_days": 419,
+              "n_investable_rows": 219329
+            },
+            "statistics": {
+              "skew": -0.2149,
+              "kurtosis": 4.9215,
+              "units_note": "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. prob_beats_best_of_n_trials is the deflated Sharpe: the probability this strategy's true Sharpe beats what the best of n_trials worthless strategies would have printed. Below 0.5 it is more likely than not that the result is no better than the best of the worthless strategies tried; confirming an effect takes 0.95, the eval suite's gate, and anything between is not support. Never tabulate these beside a Sharpe ratio as though they shared units.",
+              "n_trials_note": "n_trials_used=3 is the count AS OF THIS CALL. Running further backtests afterwards raises the honest count and makes this figure too generous. Call analyze_results again on every backtest after the last one has run, and report those numbers.",
+              "n_trials_used": 3,
+              "n_observations": 419,
+              "n_trials_observed": 3,
+              "sharpe_annualised": 1.2526,
+              "sharpe_per_period": 0.078903,
+              "prob_sharpe_above_zero": 0.9446,
+              "trial_variance_assumption": 0.0009,
+              "prob_beats_best_of_n_trials": 0.8594,
+              "min_track_record_length_days": 445.6,
+              "expected_max_sharpe_from_luck": 0.025584
+            },
+            "analysis_error": null
+          }
+        ],
+        "provenance": {
+          "ok": true,
+          "checked": 56,
+          "verified": 56,
+          "exempt": 8,
+          "unverified": []
+        },
+        "run": {
+          "model": "claude-sonnet-5",
+          "stop_reason": "end_turn",
+          "turns": 7,
+          "tool_sequence": [
+            "fetch_data",
+            "compute_feature",
+            "compute_feature",
+            "run_backtest",
+            "run_backtest",
+            "compute_feature",
+            "run_backtest",
+            "analyze_results",
+            "analyze_results",
+            "analyze_results"
+          ],
+          "n_backtests": 3,
+          "total_tokens": 39869,
+          "cost_usd": 0.093469
+        },
+        "assumptions": {
+          "universe": "all ingested tickers (CURRENT constituents)",
+          "trial_variance": 0.0009,
+          "n_trials_for_deflation": 3,
+          "benchmark_tool_available": false,
+          "survivorship_bias_present": true,
+          "trial_variance_is_assumed": true,
+          "universe_is_point_in_time": false,
+          "quality_gate_is_point_in_time": false,
+          "prices_are_split_adjusted_only": true,
+          "returns_are_price_returns_not_total_returns": true
+        }
+      },
       {
         "note_id": "910f5611-299a-4114-a696-3a325cf3df83",
         "eval_key": null,
