@@ -1,7 +1,7 @@
 {
   "snapshot_version": 1,
-  "generated_at": "2026-09-27T22:31:58+00:00",
-  "code_commit": "b2f722a",
+  "generated_at": "2026-09-27T22:49:50+00:00",
+  "code_commit": "23be54c",
   "registry_sha": "1b30d5d16a5dc15cebc9691c634a8f75535dbf355d9ee3d76d6a281d01c78b92",
   "scoring": {
     "rule_version": 1,
@@ -326,11 +326,133 @@
   },
   "notes": {
     "counts": {
-      "total": 1,
-      "publishable": 0,
+      "total": 2,
+      "publishable": 1,
       "unpublishable": 1
     },
     "items": [
+      {
+        "note_id": "3d4cac46-3d7b-4c61-a4ed-ff98453d9ef0",
+        "eval_key": null,
+        "created_at": "2026-09-27T22:49:49.059501+00:00",
+        "hypothesis": "Do stocks that went up over the last year keep going up, on point-in-time membership?",
+        "prose": "These are my final two backtests, so I'll report these `analyze_results` figures directly (n_trials_used=2, matching the two backtests actually run).\n\n## Findings: 12-1 Momentum on Point-in-Time S&P 500 Membership\n\n**The hypothesis test (long/short, dollar-neutral decile spread)** is the correct isolation of the cross-sectional momentum effect:\n\n- Sharpe (annualised): **0.454389**\n- Total return over window: **0.100205** (CAGR 0.106403), ann. vol 0.392758, max drawdown -0.334396\n- n_invested_days: 238 (roughly the first year is unscored, since mom_12_1 needs 252 days of history \u2014 first_date_with_values was 2025-09-08)\n- **prob_sharpe_above_zero: 0.6693**\n- **prob_beats_best_of_n_trials: 0.579** (this is the deflated-Sharpe result)\n- **min_track_record_length_days: 3342.0** \u2014 i.e., you'd need about 3342 trading days (~13 years) of this kind of return stream to be confident the true Sharpe is distinguishable from zero\n- n_trials_used: 2\n\n**Interpretation:** A prob_beats_best_of_n_trials of 0.579 is only marginally above the 0.5 coin-flip line, and the required track record (3342 days) is more than 10x longer than what we actually have (238 invested days). The long/short spread is positive but the evidence is weak \u2014 this is exactly the \"high Sharpe on a short sample\" situation that should not be oversold.\n\n**The long-only decile 10 result** (Sharpe 1.295908, prob_beats_best_of_n_trials 0.844) looks much stronger, but per the tool's own caveat, long-only portfolios carry market beta that no tool here can separate out. Given that the invested window was a strong bull period for momentum names generally, this Sharpe most likely reflects broad market/momentum-tilted beta exposure during 2025, not evidence for the cross-sectional hypothesis. It is not a valid test of \"do winners keep winning relative to losers\" \u2014 for that, only the long/short number counts.\n\n**Bottom line:** On point-in-time membership, over the available ~238-day invested window, cross-sectional 12-1 momentum shows a positive but statistically weak long/short spread (Sharpe 0.454389, deflated-probability 0.579, needing ~3342 days of track record to be confident it's non-zero \u2014 we have 238). This is not strong enough evidence to confirm the momentum-continuation hypothesis; it's consistent with either a real but modest effect or noise. The long-only number, while eye-catching, cannot be used to support the hypothesis because it conflates market beta with the momentum tilt. A longer sample (multiple years of scored history, not just one year of overlap after the 252-day burn-in) would be needed to draw a confident conclusion.",
+        "publishable": true,
+        "unpublishable_reasons": [],
+        "backtests": [
+          {
+            "variant": "mom_12_1, 10 buckets, long/short",
+            "metrics": {
+              "cagr": 0.106403,
+              "n_days": 238.0,
+              "sharpe": 0.454389,
+              "ann_vol": 0.392758,
+              "feature": "mom_12_1",
+              "cost_bps": 10,
+              "universe": "point_in_time",
+              "n_buckets": 10,
+              "long_short": true,
+              "max_drawdown": -0.334396,
+              "total_return": 0.100205,
+              "n_scored_rows": 131497,
+              "feature_column": "mom_12_1",
+              "n_names_traded": 270,
+              "n_invested_days": 238,
+              "n_investable_rows": 124212
+            },
+            "statistics": {
+              "skew": -0.3869,
+              "kurtosis": 4.3554,
+              "units_note": "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. prob_beats_best_of_n_trials is the deflated Sharpe: the probability this strategy's true Sharpe beats what the best of n_trials worthless strategies would have printed. Below 0.5 means the evidence does not survive the number of things tried. Never tabulate these beside a Sharpe ratio as though they shared units.",
+              "n_trials_note": "n_trials_used=2 is the count AS OF THIS CALL. Running further backtests afterwards raises the honest count and makes this figure too generous. Call analyze_results again on every backtest after the last one has run, and report those numbers.",
+              "n_trials_used": 2,
+              "n_observations": 238,
+              "n_trials_observed": 2,
+              "sharpe_annualised": 0.4544,
+              "sharpe_per_period": 0.028624,
+              "prob_sharpe_above_zero": 0.6693,
+              "trial_variance_assumption": 0.0009,
+              "prob_beats_best_of_n_trials": 0.579,
+              "min_track_record_length_days": 3342.0,
+              "expected_max_sharpe_from_luck": 0.015593
+            },
+            "analysis_error": null
+          },
+          {
+            "variant": "mom_12_1, 10 buckets, long-only",
+            "metrics": {
+              "cagr": 0.402577,
+              "n_days": 238.0,
+              "sharpe": 1.295908,
+              "ann_vol": 0.294576,
+              "feature": "mom_12_1",
+              "cost_bps": 10,
+              "universe": "point_in_time",
+              "n_buckets": 10,
+              "long_short": false,
+              "max_drawdown": -0.199331,
+              "total_return": 0.376462,
+              "n_scored_rows": 131497,
+              "feature_column": "mom_12_1",
+              "n_names_traded": 147,
+              "n_invested_days": 238,
+              "n_investable_rows": 124212
+            },
+            "statistics": {
+              "skew": -0.0754,
+              "kurtosis": 3.8909,
+              "units_note": "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. prob_beats_best_of_n_trials is the deflated Sharpe: the probability this strategy's true Sharpe beats what the best of n_trials worthless strategies would have printed. Below 0.5 means the evidence does not survive the number of things tried. Never tabulate these beside a Sharpe ratio as though they shared units.",
+              "n_trials_note": "n_trials_used=2 is the count AS OF THIS CALL. Running further backtests afterwards raises the honest count and makes this figure too generous. Call analyze_results again on every backtest after the last one has run, and report those numbers.",
+              "n_trials_used": 2,
+              "n_observations": 238,
+              "n_trials_observed": 2,
+              "sharpe_annualised": 1.2959,
+              "sharpe_per_period": 0.081635,
+              "prob_sharpe_above_zero": 0.8943,
+              "trial_variance_assumption": 0.0009,
+              "prob_beats_best_of_n_trials": 0.844,
+              "min_track_record_length_days": 411.4,
+              "expected_max_sharpe_from_luck": 0.015593
+            },
+            "analysis_error": null
+          }
+        ],
+        "provenance": {
+          "ok": true,
+          "checked": 27,
+          "verified": 27,
+          "exempt": 12,
+          "unverified": []
+        },
+        "run": {
+          "model": "claude-sonnet-5",
+          "stop_reason": "end_turn",
+          "turns": 5,
+          "tool_sequence": [
+            "fetch_data",
+            "compute_feature",
+            "run_backtest",
+            "run_backtest",
+            "analyze_results",
+            "analyze_results"
+          ],
+          "n_backtests": 2,
+          "total_tokens": 22934,
+          "cost_usd": 0.03906
+        },
+        "assumptions": {
+          "universe": "all ingested tickers (CURRENT constituents)",
+          "trial_variance": 0.0009,
+          "n_trials_for_deflation": 2,
+          "benchmark_tool_available": false,
+          "survivorship_bias_present": true,
+          "trial_variance_is_assumed": true,
+          "universe_is_point_in_time": false,
+          "quality_gate_is_point_in_time": false,
+          "prices_are_split_adjusted_only": true,
+          "returns_are_price_returns_not_total_returns": true
+        }
+      },
       {
         "note_id": "684a4577-f488-4f86-bb7f-3b26a435251f",
         "eval_key": null,
