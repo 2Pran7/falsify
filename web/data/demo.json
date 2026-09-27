@@ -1,7 +1,7 @@
 {
   "snapshot_version": 1,
-  "generated_at": "2026-09-27T23:01:30+00:00",
-  "code_commit": "8b14089",
+  "generated_at": "2026-09-27T23:03:11+00:00",
+  "code_commit": "261735d",
   "registry_sha": "1b30d5d16a5dc15cebc9691c634a8f75535dbf355d9ee3d76d6a281d01c78b92",
   "scoring": {
     "rule_version": 1,
@@ -15,7 +15,7 @@
       "current",
       "point_in_time"
     ],
-    "last_run_at": "2026-09-27T22:55:35.507932+00:00",
+    "last_run_at": "2026-09-27T23:03:10.263171+00:00",
     "tally": {
       "current": {
         "pass": 0,
@@ -46,41 +46,41 @@
           "current": {
             "verdict": "fail",
             "reasons": [
-              "sign: oriented spread +0.629 runs as predicted (top bucket wins)",
-              "deflation: probability of beating the best of 5 trials is 0.523, below the 0.95 gate. The evidence does not survive the number of strategies this suite tried."
+              "sign: oriented spread +0.615 runs as predicted (top bucket wins)",
+              "deflation: probability of beating the best of 5 trials is 0.518, below the 0.95 gate. The evidence does not survive the number of strategies this suite tried."
             ],
-            "realised_sharpe": 0.629048,
-            "oriented_sharpe": 0.629048,
+            "realised_sharpe": 0.614879,
+            "oriented_sharpe": 0.614879,
             "published_sharpe": 0.5,
-            "p_value": 0.270492297467791,
-            "p_value_adjusted": 0.969013028412958,
-            "deflated_psr": 0.5234,
-            "n_invested_days": 238,
-            "history_days": 507,
+            "p_value": 0.2771781970044498,
+            "p_value_adjusted": 0.9743625745038001,
+            "deflated_psr": 0.5178,
+            "n_invested_days": 233,
+            "history_days": 502,
             "min_history_days": 252,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.323420+00:00"
+            "run_at": "2026-09-27T23:03:10.089852+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
             "reasons": [
               "sign: oriented spread +0.454 runs as predicted (top bucket wins)",
-              "deflation: probability of beating the best of 5 trials is 0.456, below the 0.95 gate. The evidence does not survive the number of strategies this suite tried."
+              "deflation: probability of beating the best of 5 trials is 0.457, below the 0.95 gate. The evidence does not survive the number of strategies this suite tried."
             ],
-            "realised_sharpe": 0.454389,
-            "oriented_sharpe": 0.454389,
+            "realised_sharpe": 0.454052,
+            "oriented_sharpe": 0.454052,
             "published_sharpe": 0.5,
-            "p_value": 0.3293941429189877,
-            "p_value_adjusted": 0.9578917655703166,
-            "deflated_psr": 0.4564,
-            "n_invested_days": 238,
-            "history_days": 507,
+            "p_value": 0.3312008947631453,
+            "p_value_adjusted": 0.9583236652181779,
+            "deflated_psr": 0.4567,
+            "n_invested_days": 233,
+            "history_days": 502,
             "min_history_days": 252,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.507932+00:00"
+            "run_at": "2026-09-27T23:03:10.263171+00:00"
           }
         },
-        "survivorship_sharpe_gap": 0.17465900000000006
+        "survivorship_sharpe_gap": 0.16082699999999994
       },
       {
         "key": "short_term_reversal",
@@ -96,39 +96,39 @@
           "current": {
             "verdict": "fail",
             "reasons": [
-              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -0.739. The effect ran the wrong way on this sample."
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -0.751. The effect ran the wrong way on this sample."
             ],
-            "realised_sharpe": 0.738932,
-            "oriented_sharpe": -0.738932,
+            "realised_sharpe": 0.750947,
+            "oriented_sharpe": -0.750947,
             "published_sharpe": 0.35,
-            "p_value": 0.8422532887566209,
-            "p_value_adjusted": 0.969013028412958,
-            "deflated_psr": 0.5915,
-            "n_invested_days": 465,
-            "history_days": 507,
+            "p_value": 0.844847872323504,
+            "p_value_adjusted": 0.9743625745038001,
+            "deflated_psr": 0.5973,
+            "n_invested_days": 460,
+            "history_days": 502,
             "min_history_days": 21,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.323420+00:00"
+            "run_at": "2026-09-27T23:03:10.089852+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
             "reasons": [
-              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -0.521. The effect ran the wrong way on this sample."
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -0.528. The effect ran the wrong way on this sample."
             ],
-            "realised_sharpe": 0.52148,
-            "oriented_sharpe": -0.52148,
+            "realised_sharpe": 0.528247,
+            "oriented_sharpe": -0.528247,
             "published_sharpe": 0.35,
-            "p_value": 0.7606441160573618,
-            "p_value_adjusted": 0.9578917655703166,
-            "deflated_psr": 0.4748,
-            "n_invested_days": 465,
-            "history_days": 507,
+            "p_value": 0.7622936406922094,
+            "p_value_adjusted": 0.9583236652181779,
+            "deflated_psr": 0.4786,
+            "n_invested_days": 460,
+            "history_days": 502,
             "min_history_days": 21,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.507932+00:00"
+            "run_at": "2026-09-27T23:03:10.263171+00:00"
           }
         },
-        "survivorship_sharpe_gap": -0.21745199999999998
+        "survivorship_sharpe_gap": -0.2227
       },
       {
         "key": "long_term_reversal",
@@ -144,7 +144,7 @@
           "current": {
             "verdict": "insufficient_data",
             "reasons": [
-              "not tested: rev_36_12 produced no values on this panel. It needs more history per ticker than the 507 trading days available."
+              "not tested: rev_36_12 produced no values on this panel. It needs more history per ticker than the 502 trading days available."
             ],
             "realised_sharpe": null,
             "oriented_sharpe": null,
@@ -153,15 +153,15 @@
             "p_value_adjusted": null,
             "deflated_psr": null,
             "n_invested_days": 0,
-            "history_days": 507,
+            "history_days": 502,
             "min_history_days": 756,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.323420+00:00"
+            "run_at": "2026-09-27T23:03:10.089852+00:00"
           },
           "point_in_time": {
             "verdict": "insufficient_data",
             "reasons": [
-              "not tested: rev_36_12 produced no values on this panel. It needs more history per ticker than the 507 trading days available."
+              "not tested: rev_36_12 produced no values on this panel. It needs more history per ticker than the 502 trading days available."
             ],
             "realised_sharpe": null,
             "oriented_sharpe": null,
@@ -170,10 +170,10 @@
             "p_value_adjusted": null,
             "deflated_psr": null,
             "n_invested_days": 0,
-            "history_days": 507,
+            "history_days": 502,
             "min_history_days": 756,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.507932+00:00"
+            "run_at": "2026-09-27T23:03:10.263171+00:00"
           }
         },
         "survivorship_sharpe_gap": null
@@ -192,39 +192,39 @@
           "current": {
             "verdict": "fail",
             "reasons": [
-              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.439. The effect ran the wrong way on this sample."
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.459. The effect ran the wrong way on this sample."
             ],
-            "realised_sharpe": 1.438935,
-            "oriented_sharpe": -1.438935,
+            "realised_sharpe": 1.458514,
+            "oriented_sharpe": -1.458514,
             "published_sharpe": 0.78,
-            "p_value": 0.969013028412958,
-            "p_value_adjusted": 0.969013028412958,
-            "deflated_psr": 0.8671,
-            "n_invested_days": 424,
-            "history_days": 507,
+            "p_value": 0.9699929873190418,
+            "p_value_adjusted": 0.9743625745038001,
+            "deflated_psr": 0.8709,
+            "n_invested_days": 419,
+            "history_days": 502,
             "min_history_days": 63,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.323420+00:00"
+            "run_at": "2026-09-27T23:03:10.089852+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
             "reasons": [
-              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.331. The effect ran the wrong way on this sample."
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.343. The effect ran the wrong way on this sample."
             ],
-            "realised_sharpe": 1.331194,
-            "oriented_sharpe": -1.331194,
+            "realised_sharpe": 1.342857,
+            "oriented_sharpe": -1.342857,
             "published_sharpe": 0.78,
-            "p_value": 0.9578917655703166,
-            "p_value_adjusted": 0.9578917655703166,
-            "deflated_psr": 0.8371,
-            "n_invested_days": 424,
-            "history_days": 507,
+            "p_value": 0.9583236652181779,
+            "p_value_adjusted": 0.9583236652181779,
+            "deflated_psr": 0.8393,
+            "n_invested_days": 419,
+            "history_days": 502,
             "min_history_days": 63,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.507932+00:00"
+            "run_at": "2026-09-27T23:03:10.263171+00:00"
           }
         },
-        "survivorship_sharpe_gap": -0.10774100000000009
+        "survivorship_sharpe_gap": -0.11565700000000012
       },
       {
         "key": "idiosyncratic_volatility",
@@ -240,39 +240,39 @@
           "current": {
             "verdict": "fail",
             "reasons": [
-              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.337. The effect ran the wrong way on this sample."
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.512. The effect ran the wrong way on this sample."
             ],
-            "realised_sharpe": 1.337186,
-            "oriented_sharpe": -1.337186,
+            "realised_sharpe": 1.511623,
+            "oriented_sharpe": -1.511623,
             "published_sharpe": 0.6,
-            "p_value": 0.9585853589752406,
-            "p_value_adjusted": 0.969013028412958,
-            "deflated_psr": 0.837,
-            "n_invested_days": 424,
-            "history_days": 507,
+            "p_value": 0.9743625745038001,
+            "p_value_adjusted": 0.9743625745038001,
+            "deflated_psr": 0.8837,
+            "n_invested_days": 419,
+            "history_days": 502,
             "min_history_days": 63,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.323420+00:00"
+            "run_at": "2026-09-27T23:03:10.089852+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
             "reasons": [
-              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.292. The effect ran the wrong way on this sample."
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.253. The effect ran the wrong way on this sample."
             ],
-            "realised_sharpe": 1.2916,
-            "oriented_sharpe": -1.2916,
+            "realised_sharpe": 1.252554,
+            "oriented_sharpe": -1.252554,
             "published_sharpe": 0.6,
-            "p_value": 0.9530691553185877,
-            "p_value_adjusted": 0.9578917655703166,
-            "deflated_psr": 0.8229,
-            "n_invested_days": 424,
-            "history_days": 507,
+            "p_value": 0.9468570022476662,
+            "p_value_adjusted": 0.9583236652181779,
+            "deflated_psr": 0.8083,
+            "n_invested_days": 419,
+            "history_days": 502,
             "min_history_days": 63,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.507932+00:00"
+            "run_at": "2026-09-27T23:03:10.263171+00:00"
           }
         },
-        "survivorship_sharpe_gap": -0.045585999999999904
+        "survivorship_sharpe_gap": -0.259069
       },
       {
         "key": "fifty_two_week_high",
@@ -288,39 +288,39 @@
           "current": {
             "verdict": "fail",
             "reasons": [
-              "sign: the paper predicts the top bucket wins, and the oriented spread was -0.440. The effect ran the wrong way on this sample."
+              "sign: the paper predicts the top bucket wins, and the oriented spread was -0.453. The effect ran the wrong way on this sample."
             ],
-            "realised_sharpe": -0.440065,
-            "oriented_sharpe": -0.440065,
+            "realised_sharpe": -0.453233,
+            "oriented_sharpe": -0.453233,
             "published_sharpe": 0.55,
-            "p_value": 0.6655529584903943,
-            "p_value_adjusted": 0.969013028412958,
-            "deflated_psr": 0.1641,
-            "n_invested_days": 238,
-            "history_days": 507,
+            "p_value": 0.6685134423302547,
+            "p_value_adjusted": 0.9743625745038001,
+            "deflated_psr": 0.1635,
+            "n_invested_days": 233,
+            "history_days": 502,
             "min_history_days": 252,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.323420+00:00"
+            "run_at": "2026-09-27T23:03:10.089852+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
             "reasons": [
-              "sign: the paper predicts the top bucket wins, and the oriented spread was -0.552. The effect ran the wrong way on this sample."
+              "sign: the paper predicts the top bucket wins, and the oriented spread was -0.565. The effect ran the wrong way on this sample."
             ],
-            "realised_sharpe": -0.551802,
-            "oriented_sharpe": -0.551802,
+            "realised_sharpe": -0.565359,
+            "oriented_sharpe": -0.565359,
             "published_sharpe": 0.55,
-            "p_value": 0.70410888960307,
-            "p_value_adjusted": 0.9578917655703166,
-            "deflated_psr": 0.1388,
-            "n_invested_days": 238,
-            "history_days": 507,
+            "p_value": 0.7066513349259147,
+            "p_value_adjusted": 0.9583236652181779,
+            "deflated_psr": 0.1385,
+            "n_invested_days": 233,
+            "history_days": 502,
             "min_history_days": 252,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:55:35.507932+00:00"
+            "run_at": "2026-09-27T23:03:10.263171+00:00"
           }
         },
-        "survivorship_sharpe_gap": 0.11173700000000003
+        "survivorship_sharpe_gap": 0.11212599999999995
       }
     ]
   },
