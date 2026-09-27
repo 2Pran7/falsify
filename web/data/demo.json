@@ -1,7 +1,7 @@
 {
   "snapshot_version": 1,
-  "generated_at": "2026-09-27T22:50:53+00:00",
-  "code_commit": "f66e19e",
+  "generated_at": "2026-09-27T22:55:41+00:00",
+  "code_commit": "2b4c4f5",
   "registry_sha": "1b30d5d16a5dc15cebc9691c634a8f75535dbf355d9ee3d76d6a281d01c78b92",
   "scoring": {
     "rule_version": 1,
@@ -15,7 +15,7 @@
       "current",
       "point_in_time"
     ],
-    "last_run_at": "2026-09-27T22:31:51.824940+00:00",
+    "last_run_at": "2026-09-27T22:55:35.507932+00:00",
     "tally": {
       "current": {
         "pass": 0,
@@ -59,7 +59,7 @@
             "history_days": 507,
             "min_history_days": 252,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.675124+00:00"
+            "run_at": "2026-09-27T22:55:35.323420+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
@@ -77,7 +77,7 @@
             "history_days": 507,
             "min_history_days": 252,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.824940+00:00"
+            "run_at": "2026-09-27T22:55:35.507932+00:00"
           }
         },
         "survivorship_sharpe_gap": 0.17465900000000006
@@ -108,7 +108,7 @@
             "history_days": 507,
             "min_history_days": 21,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.675124+00:00"
+            "run_at": "2026-09-27T22:55:35.323420+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
@@ -125,7 +125,7 @@
             "history_days": 507,
             "min_history_days": 21,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.824940+00:00"
+            "run_at": "2026-09-27T22:55:35.507932+00:00"
           }
         },
         "survivorship_sharpe_gap": -0.21745199999999998
@@ -156,7 +156,7 @@
             "history_days": 507,
             "min_history_days": 756,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.675124+00:00"
+            "run_at": "2026-09-27T22:55:35.323420+00:00"
           },
           "point_in_time": {
             "verdict": "insufficient_data",
@@ -173,7 +173,7 @@
             "history_days": 507,
             "min_history_days": 756,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.824940+00:00"
+            "run_at": "2026-09-27T22:55:35.507932+00:00"
           }
         },
         "survivorship_sharpe_gap": null
@@ -204,7 +204,7 @@
             "history_days": 507,
             "min_history_days": 63,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.675124+00:00"
+            "run_at": "2026-09-27T22:55:35.323420+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
@@ -221,7 +221,7 @@
             "history_days": 507,
             "min_history_days": 63,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.824940+00:00"
+            "run_at": "2026-09-27T22:55:35.507932+00:00"
           }
         },
         "survivorship_sharpe_gap": -0.10774100000000009
@@ -252,7 +252,7 @@
             "history_days": 507,
             "min_history_days": 63,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.675124+00:00"
+            "run_at": "2026-09-27T22:55:35.323420+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
@@ -269,7 +269,7 @@
             "history_days": 507,
             "min_history_days": 63,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.824940+00:00"
+            "run_at": "2026-09-27T22:55:35.507932+00:00"
           }
         },
         "survivorship_sharpe_gap": -0.045585999999999904
@@ -300,7 +300,7 @@
             "history_days": 507,
             "min_history_days": 252,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.675124+00:00"
+            "run_at": "2026-09-27T22:55:35.323420+00:00"
           },
           "point_in_time": {
             "verdict": "fail",
@@ -317,7 +317,7 @@
             "history_days": 507,
             "min_history_days": 252,
             "n_trials": 5,
-            "run_at": "2026-09-27T22:31:51.824940+00:00"
+            "run_at": "2026-09-27T22:55:35.507932+00:00"
           }
         },
         "survivorship_sharpe_gap": 0.11173700000000003
