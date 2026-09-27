@@ -1,0 +1,482 @@
+{
+  "snapshot_version": 1,
+  "generated_at": "2026-09-27T22:31:58+00:00",
+  "code_commit": "b2f722a",
+  "registry_sha": "1b30d5d16a5dc15cebc9691c634a8f75535dbf355d9ee3d76d6a281d01c78b92",
+  "scoring": {
+    "rule_version": 1,
+    "deflation_threshold": 0.95,
+    "fdr_alpha": 0.05,
+    "embarrassment_multiple": 3.0,
+    "trial_variance_assumed": 0.0009
+  },
+  "evals": {
+    "universes": [
+      "current",
+      "point_in_time"
+    ],
+    "last_run_at": "2026-09-27T22:31:51.824940+00:00",
+    "tally": {
+      "current": {
+        "pass": 0,
+        "partial": 0,
+        "fail": 5,
+        "insufficient_data": 1
+      },
+      "point_in_time": {
+        "pass": 0,
+        "partial": 0,
+        "fail": 5,
+        "insufficient_data": 1
+      }
+    },
+    "missing": [],
+    "anomalies": [
+      {
+        "key": "momentum_12_1",
+        "feature": "mom_12_1",
+        "direction": 1,
+        "published_sharpe": 0.5,
+        "min_history_days": 252,
+        "citation": "Jegadeesh & Titman (1993), Journal of Finance 48(1)",
+        "hypothesis": "Stocks with high returns over the past twelve months, skipping the most recent month, continue to outperform stocks with low past returns over the following month.",
+        "sharpe_source": "The paper reports monthly excess returns and t-statistics, not a Sharpe. 0.50 is the widely quoted long-run annualised Sharpe of the UMD factor.",
+        "caveat": "Prices here are split-adjusted only, never dividend-adjusted, so every return is a price return. The Ken French UMD series is a total-return construction and is not like-for-like.",
+        "results": {
+          "current": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: oriented spread +0.629 runs as predicted (top bucket wins)",
+              "deflation: probability of beating the best of 5 trials is 0.523, below the 0.95 gate. The evidence does not survive the number of strategies this suite tried."
+            ],
+            "realised_sharpe": 0.629048,
+            "oriented_sharpe": 0.629048,
+            "published_sharpe": 0.5,
+            "p_value": 0.270492297467791,
+            "p_value_adjusted": 0.969013028412958,
+            "deflated_psr": 0.5234,
+            "n_invested_days": 238,
+            "history_days": 507,
+            "min_history_days": 252,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.675124+00:00"
+          },
+          "point_in_time": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: oriented spread +0.454 runs as predicted (top bucket wins)",
+              "deflation: probability of beating the best of 5 trials is 0.456, below the 0.95 gate. The evidence does not survive the number of strategies this suite tried."
+            ],
+            "realised_sharpe": 0.454389,
+            "oriented_sharpe": 0.454389,
+            "published_sharpe": 0.5,
+            "p_value": 0.3293941429189877,
+            "p_value_adjusted": 0.9578917655703166,
+            "deflated_psr": 0.4564,
+            "n_invested_days": 238,
+            "history_days": 507,
+            "min_history_days": 252,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.824940+00:00"
+          }
+        },
+        "survivorship_sharpe_gap": 0.17465900000000006
+      },
+      {
+        "key": "short_term_reversal",
+        "feature": "ret_21d",
+        "direction": -1,
+        "published_sharpe": 0.35,
+        "min_history_days": 21,
+        "citation": "Jegadeesh (1990), Journal of Finance 45(3)",
+        "hypothesis": "Stocks with the highest returns over the past month underperform those with the lowest over the following month: the one-month effect runs opposite to twelve-month momentum.",
+        "sharpe_source": "Reference level for the short-term reversal factor. The published effect is reported as a monthly return spread.",
+        "caveat": "The published effect is largely a bid-ask bounce and microstructure phenomenon, and is the one anomaly here most likely to be destroyed by realistic trading costs. It rebalances monthly at 10bps one-way; the literature suggests that is optimistic for this signal specifically.",
+        "results": {
+          "current": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -0.739. The effect ran the wrong way on this sample."
+            ],
+            "realised_sharpe": 0.738932,
+            "oriented_sharpe": -0.738932,
+            "published_sharpe": 0.35,
+            "p_value": 0.8422532887566209,
+            "p_value_adjusted": 0.969013028412958,
+            "deflated_psr": 0.5915,
+            "n_invested_days": 465,
+            "history_days": 507,
+            "min_history_days": 21,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.675124+00:00"
+          },
+          "point_in_time": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -0.521. The effect ran the wrong way on this sample."
+            ],
+            "realised_sharpe": 0.52148,
+            "oriented_sharpe": -0.52148,
+            "published_sharpe": 0.35,
+            "p_value": 0.7606441160573618,
+            "p_value_adjusted": 0.9578917655703166,
+            "deflated_psr": 0.4748,
+            "n_invested_days": 465,
+            "history_days": 507,
+            "min_history_days": 21,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.824940+00:00"
+          }
+        },
+        "survivorship_sharpe_gap": -0.21745199999999998
+      },
+      {
+        "key": "long_term_reversal",
+        "feature": "rev_36_12",
+        "direction": -1,
+        "published_sharpe": 0.2,
+        "min_history_days": 756,
+        "citation": "De Bondt & Thaler (1985), Journal of Finance 40(3)",
+        "hypothesis": "Stocks with the highest returns over the past three years, skipping the most recent year, underperform over the following period: extreme past performance mean-reverts at long horizons.",
+        "sharpe_source": "The paper reports cumulative abnormal returns over 36-month holding periods. 0.20 is a conservative annualised reference level.",
+        "caveat": "The published test uses 36-month FORMATION and 36-month HOLDING periods. This holds for one month and rebalances monthly, which is a much higher turnover implementation of the same sort. A weaker result is expected even where the effect is real.",
+        "results": {
+          "current": {
+            "verdict": "insufficient_data",
+            "reasons": [
+              "not tested: rev_36_12 produced no values on this panel. It needs more history per ticker than the 507 trading days available."
+            ],
+            "realised_sharpe": null,
+            "oriented_sharpe": null,
+            "published_sharpe": 0.2,
+            "p_value": null,
+            "p_value_adjusted": null,
+            "deflated_psr": null,
+            "n_invested_days": 0,
+            "history_days": 507,
+            "min_history_days": 756,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.675124+00:00"
+          },
+          "point_in_time": {
+            "verdict": "insufficient_data",
+            "reasons": [
+              "not tested: rev_36_12 produced no values on this panel. It needs more history per ticker than the 507 trading days available."
+            ],
+            "realised_sharpe": null,
+            "oriented_sharpe": null,
+            "published_sharpe": 0.2,
+            "p_value": null,
+            "p_value_adjusted": null,
+            "deflated_psr": null,
+            "n_invested_days": 0,
+            "history_days": 507,
+            "min_history_days": 756,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.824940+00:00"
+          }
+        },
+        "survivorship_sharpe_gap": null
+      },
+      {
+        "key": "low_volatility",
+        "feature": "vol_63d",
+        "direction": -1,
+        "published_sharpe": 0.78,
+        "min_history_days": 63,
+        "citation": "Ang, Hodrick, Xing & Zhang (2006), Journal of Finance 61(1)",
+        "hypothesis": "Low-volatility stocks earn higher risk-adjusted returns than high-volatility stocks: the security market line is flatter than theory predicts, and at the extreme it inverts.",
+        "sharpe_source": "Reference level taken from the betting-against-beta literature (Frazzini & Pedersen 2014), which reports the highest Sharpe of any anomaly in this suite.",
+        "caveat": "THIS SORTS ON TOTAL VOLATILITY; Frazzini-Pedersen BAB sorts on BETA and is beta-neutralised by construction. A related effect, not the same one, and the 0.78 reference belongs to the version this does not implement.",
+        "results": {
+          "current": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.439. The effect ran the wrong way on this sample."
+            ],
+            "realised_sharpe": 1.438935,
+            "oriented_sharpe": -1.438935,
+            "published_sharpe": 0.78,
+            "p_value": 0.969013028412958,
+            "p_value_adjusted": 0.969013028412958,
+            "deflated_psr": 0.8671,
+            "n_invested_days": 424,
+            "history_days": 507,
+            "min_history_days": 63,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.675124+00:00"
+          },
+          "point_in_time": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.331. The effect ran the wrong way on this sample."
+            ],
+            "realised_sharpe": 1.331194,
+            "oriented_sharpe": -1.331194,
+            "published_sharpe": 0.78,
+            "p_value": 0.9578917655703166,
+            "p_value_adjusted": 0.9578917655703166,
+            "deflated_psr": 0.8371,
+            "n_invested_days": 424,
+            "history_days": 507,
+            "min_history_days": 63,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.824940+00:00"
+          }
+        },
+        "survivorship_sharpe_gap": -0.10774100000000009
+      },
+      {
+        "key": "idiosyncratic_volatility",
+        "feature": "ivol_63d",
+        "direction": -1,
+        "published_sharpe": 0.6,
+        "min_history_days": 63,
+        "citation": "Ang, Hodrick, Xing & Zhang (2006), Journal of Finance 61(1)",
+        "hypothesis": "Stocks with high idiosyncratic volatility relative to a market model earn abnormally LOW average returns: the puzzle is that the sign is backwards from what bearing unpriced risk should pay.",
+        "sharpe_source": "Reference level for the published IVOL spread, reported in the paper as a monthly alpha rather than a Sharpe.",
+        "caveat": "The residual here comes from a MARKET-ONLY regression on SPY with no intercept. The published residual is from three factors, which are not in this database. A stated simplification beats an invented factor series. If SPY is absent the feature is null everywhere rather than falling back to total volatility, which would score low_volatility twice under two names and call the second one independent evidence.",
+        "results": {
+          "current": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.337. The effect ran the wrong way on this sample."
+            ],
+            "realised_sharpe": 1.337186,
+            "oriented_sharpe": -1.337186,
+            "published_sharpe": 0.6,
+            "p_value": 0.9585853589752406,
+            "p_value_adjusted": 0.969013028412958,
+            "deflated_psr": 0.837,
+            "n_invested_days": 424,
+            "history_days": 507,
+            "min_history_days": 63,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.675124+00:00"
+          },
+          "point_in_time": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: the paper predicts the bottom bucket wins, and the oriented spread was -1.292. The effect ran the wrong way on this sample."
+            ],
+            "realised_sharpe": 1.2916,
+            "oriented_sharpe": -1.2916,
+            "published_sharpe": 0.6,
+            "p_value": 0.9530691553185877,
+            "p_value_adjusted": 0.9578917655703166,
+            "deflated_psr": 0.8229,
+            "n_invested_days": 424,
+            "history_days": 507,
+            "min_history_days": 63,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.824940+00:00"
+          }
+        },
+        "survivorship_sharpe_gap": -0.045585999999999904
+      },
+      {
+        "key": "fifty_two_week_high",
+        "feature": "pct_52w_high",
+        "direction": 1,
+        "published_sharpe": 0.55,
+        "min_history_days": 252,
+        "citation": "George & Hwang (2004), Journal of Finance 59(5)",
+        "hypothesis": "Stocks trading close to their 52-week high outperform those trading far below it, and this proximity predicts returns better than the past return itself does.",
+        "sharpe_source": "Reference level for the nearness-to-high strategy; the paper reports monthly return spreads.",
+        "caveat": "Strongly correlated with momentum by construction \u2014 a stock near its 52-week high generally got there by rising \u2014 so this is NOT independent evidence of a separate effect. Both are in the suite, and both are counted in the trial count and the multiplicity correction, which is the honest way to carry a correlated pair.",
+        "results": {
+          "current": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: the paper predicts the top bucket wins, and the oriented spread was -0.440. The effect ran the wrong way on this sample."
+            ],
+            "realised_sharpe": -0.440065,
+            "oriented_sharpe": -0.440065,
+            "published_sharpe": 0.55,
+            "p_value": 0.6655529584903943,
+            "p_value_adjusted": 0.969013028412958,
+            "deflated_psr": 0.1641,
+            "n_invested_days": 238,
+            "history_days": 507,
+            "min_history_days": 252,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.675124+00:00"
+          },
+          "point_in_time": {
+            "verdict": "fail",
+            "reasons": [
+              "sign: the paper predicts the top bucket wins, and the oriented spread was -0.552. The effect ran the wrong way on this sample."
+            ],
+            "realised_sharpe": -0.551802,
+            "oriented_sharpe": -0.551802,
+            "published_sharpe": 0.55,
+            "p_value": 0.70410888960307,
+            "p_value_adjusted": 0.9578917655703166,
+            "deflated_psr": 0.1388,
+            "n_invested_days": 238,
+            "history_days": 507,
+            "min_history_days": 252,
+            "n_trials": 5,
+            "run_at": "2026-09-27T22:31:51.824940+00:00"
+          }
+        },
+        "survivorship_sharpe_gap": 0.11173700000000003
+      }
+    ]
+  },
+  "notes": {
+    "counts": {
+      "total": 1,
+      "publishable": 0,
+      "unpublishable": 1
+    },
+    "items": [
+      {
+        "note_id": "684a4577-f488-4f86-bb7f-3b26a435251f",
+        "eval_key": null,
+        "created_at": "2026-09-15T15:12:07.352608+00:00",
+        "hypothesis": "do stocks that went up over the last year keep going up?",
+        "prose": "These are my final backtests (n_trials_used=2 matches the actual count), so these numbers are the ones to report.\n\n## Findings: Does 12-month momentum (skipping the last month) persist?\n\n**Setup:** 549-ticker universe, mom_12_1 feature (12-month return skipping most recent month), decile sort, monthly rebalance, 10bps costs. The feature requires 252 days of history, so despite ~2 years of raw data, the *invested* window is only 238 trading days (~1 year, Sept 2025\u2013present).\n\n**The correct test \u2014 long/short decile spread (isolates the cross-sectional effect):**\n- Sharpe: 0.65 (annualised)\n- Max drawdown: -32%\n- prob_sharpe_above_zero: 0.73\n- **prob_beats_best_of_n_trials (deflated Sharpe signal): 0.65** \u2014 above 0.5, but not decisively so\n- Minimum track record length needed: **1,655 days** (~6.6 years) to statistically distinguish this Sharpe from zero\n\n**Long-only (top decile), for reference only \u2014 NOT a test of the hypothesis:**\n- Sharpe: 1.48, prob_beats_best_of_n: 0.88\n- This number includes market beta with no way to strip it out here. The window (Sept 2025 onward) may simply have been a strong up-market, in which case a long-only momentum tilt looks great regardless of any cross-sectional momentum effect. It should not be cited as evidence for \"momentum persists.\"\n\n### Bottom line\nThe hypothesis is meant to be tested by the long/short spread, and that spread gives a modest positive Sharpe (0.65) with a 65% probability of beating the best of the two strategies tried \u2014 better than a coin flip, but well short of a confident result. Critically, **the minimum track record length is ~1,655 trading days (~6.6 years), and we only have 238 days of invested data** \u2014 roughly a 7x shortfall. This means the data we have is nowhere near enough to say with statistical confidence that this Sharpe ratio is distinguishable from zero, even though the point estimate is positive.\n\n**Honest conclusion:** The evidence is suggestive but insufficient. There's a positive momentum spread in this sample, but the track record is far too short to confirm it's real skill/effect rather than noise. The long-only Sharpe of 1.48 looks impressive but reflects market exposure over a single one-year window and says nothing reliable about whether \"stocks that went up keep going up\" in a market-neutral sense. To make this convincing, we'd need several more years of invested history (ideally >1,600 trading days) and/or corroborating evidence across different regimes and universes.",
+        "publishable": false,
+        "unpublishable_reasons": [
+          "provenance failed: 1 numeral in the prose appears in no tool result"
+        ],
+        "backtests": [
+          {
+            "variant": "mom_12_1, 10 buckets, long/short",
+            "metrics": {
+              "cagr": 0.196621,
+              "n_days": 238.0,
+              "sharpe": 0.648212,
+              "ann_vol": 0.402244,
+              "feature": "mom_12_1",
+              "cost_bps": 10,
+              "n_buckets": 10,
+              "long_short": true,
+              "max_drawdown": -0.319069,
+              "total_return": 0.184748,
+              "n_names_traded": 273,
+              "n_invested_days": 238
+            },
+            "statistics": {
+              "skew": -0.4511,
+              "kurtosis": 3.751,
+              "units_note": "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. prob_beats_best_of_n_trials is the deflated Sharpe: the probability this strategy's true Sharpe beats what the best of n_trials worthless strategies would have printed. Below 0.5 means the evidence does not survive the number of things tried. Never tabulate these beside a Sharpe ratio as though they shared units.",
+              "n_trials_note": "n_trials_used=2 is the count AS OF THIS CALL. Running further backtests afterwards raises the honest count and makes this figure too generous. Call analyze_results again on every backtest after the last one has run, and report those numbers.",
+              "n_trials_used": 2,
+              "n_observations": 238,
+              "n_trials_observed": 2,
+              "sharpe_annualised": 0.6482,
+              "sharpe_per_period": 0.040834,
+              "prob_sharpe_above_zero": 0.7332,
+              "trial_variance_assumption": 0.0009,
+              "prob_beats_best_of_n_trials": 0.6498,
+              "min_track_record_length_days": 1655.4,
+              "expected_max_sharpe_from_luck": 0.015593
+            },
+            "analysis_error": null
+          },
+          {
+            "variant": "mom_12_1, 10 buckets, long-only",
+            "metrics": {
+              "cagr": 0.520553,
+              "n_days": 238.0,
+              "sharpe": 1.476523,
+              "ann_vol": 0.31824,
+              "feature": "mom_12_1",
+              "cost_bps": 10,
+              "n_buckets": 10,
+              "long_short": false,
+              "max_drawdown": -0.191194,
+              "total_return": 0.48556,
+              "n_names_traded": 146,
+              "n_invested_days": 238
+            },
+            "statistics": {
+              "skew": -0.1564,
+              "kurtosis": 3.4817,
+              "units_note": "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. prob_beats_best_of_n_trials is the deflated Sharpe: the probability this strategy's true Sharpe beats what the best of n_trials worthless strategies would have printed. Below 0.5 means the evidence does not survive the number of things tried. Never tabulate these beside a Sharpe ratio as though they shared units.",
+              "n_trials_note": "n_trials_used=2 is the count AS OF THIS CALL. Running further backtests afterwards raises the honest count and makes this figure too generous. Call analyze_results again on every backtest after the last one has run, and report those numbers.",
+              "n_trials_used": 2,
+              "n_observations": 238,
+              "n_trials_observed": 2,
+              "sharpe_annualised": 1.4765,
+              "sharpe_per_period": 0.093012,
+              "prob_sharpe_above_zero": 0.9219,
+              "trial_variance_assumption": 0.0009,
+              "prob_beats_best_of_n_trials": 0.881,
+              "min_track_record_length_days": 320.0,
+              "expected_max_sharpe_from_luck": 0.015593
+            },
+            "analysis_error": null
+          }
+        ],
+        "provenance": {
+          "ok": false,
+          "checked": 21,
+          "verified": 20,
+          "exempt": 9,
+          "unverified": [
+            "'1,600' in: ...ore years of invested history (ideally >1,600 trading days) and/or corroborating evid..."
+          ]
+        },
+        "run": {
+          "model": "claude-sonnet-5",
+          "stop_reason": "end_turn",
+          "turns": 5,
+          "tool_sequence": [
+            "fetch_data",
+            "compute_feature",
+            "run_backtest",
+            "run_backtest",
+            "analyze_results",
+            "analyze_results"
+          ],
+          "n_backtests": 2,
+          "total_tokens": 19658,
+          "cost_usd": 0.038141
+        },
+        "assumptions": {
+          "trial_variance": 0.0009,
+          "n_trials_for_deflation": 2,
+          "benchmark_tool_available": false,
+          "trial_variance_is_assumed": true,
+          "quality_gate_is_point_in_time": false,
+          "prices_are_split_adjusted_only": true,
+          "returns_are_price_returns_not_total_returns": true
+        }
+      }
+    ]
+  },
+  "survivorship": {
+    "generated_at": "2026-09-27T22:31:57+00:00",
+    "window": {
+      "first": "2025-09-30",
+      "last": "2026-09-11",
+      "invested_days": 239
+    },
+    "gate": "point_in_time",
+    "n_tickers_gated": 2,
+    "forced_past_coverage_gate": false,
+    "bound": "lower",
+    "metrics": {
+      "total_return_current": 0.14581137028803792,
+      "total_return_pit": 0.1002048645709539,
+      "total_return_gap": 0.04560650571708402,
+      "cagr_current": 0.1550223030959379,
+      "cagr_pit": 0.10640258575267536,
+      "cagr_gap": 0.048619717343262536,
+      "ann_vol_current": 0.4140201605798336,
+      "ann_vol_pit": 0.3927579397537982,
+      "ann_vol_gap": 0.021262220826035405,
+      "sharpe_current": 0.5558030191271417,
+      "sharpe_pit": 0.45438900749080763,
+      "sharpe_gap": 0.10141401163633407,
+      "max_drawdown_current": -0.33987997246944035,
+      "max_drawdown_pit": -0.3343958222498634,
+      "max_drawdown_gap": -0.005484150219576933,
+      "n_days_current": 238.0,
+      "n_days_pit": 238.0
+    }
+  }
+}
