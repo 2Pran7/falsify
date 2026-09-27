@@ -279,4 +279,7 @@ def build_snapshot(
     )
 
 
-__all__ = ["ExportError", "SNAPSHOT_VERSION", "UNIVERSES", "build_snapshot"]
+# Public name for the live API, which renders a visitor's note the same way.
+note_record = _note_record
+
+__all__ = ["ExportError", "SNAPSHOT_VERSION", "UNIVERSES", "build_snapshot", "note_record"]

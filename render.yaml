@@ -1,0 +1,27 @@
+# Render blueprint for the live-run API. Free plan: sleeps after 15 min idle,
+# ~1 min to wake. Secrets marked sync:false are entered in the dashboard.
+services:
+  - type: web
+    name: falsify-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && pip install -e .
+    startCommand: uvicorn falsify.live.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: VISITOR_SALT
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: https://falsify-ten.vercel.app,http://localhost:3000
+      - key: LIVE_DAILY_USD_CAP
+        value: "2.0"
+      - key: POLYGON_API_KEY
+        value: not-used-by-the-live-server

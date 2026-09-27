@@ -367,3 +367,27 @@ python scripts/run_agent.py "do low-volatility stocks outperform?"
 python scripts/show_notes.py                      # list, newest first
 python scripts/show_notes.py <note_id> --out note.md
 ```
+
+## Live runs
+
+The public site also has a **Try it live** page. A visitor types a hypothesis;
+a small FastAPI server (`src/falsify/live/`, on Render) runs the same agent loop
+against a hosted copy of the price data (Neon Postgres) and returns the note to
+that visitor only.
+
+- **The owner pays, under a hard cap.** Each run reserves its worst-case cost
+  ($0.45) the moment it is queued, and a run starts only if that reservation
+  still fits under the daily dollar cap, so the cap is never crossed. On top:
+  25 runs a day in total and 3 per visitor.
+- **Visitors see only their own run.** It is readable only by its random id.
+  Live runs are stored in `live_run`, never `research_note`, so
+  `export_demo.py` cannot put a stranger's text on the public page.
+- **The owner sees everything** at `/admin` with a token: every question, the
+  optional name a visitor left, a hashed visitor id (no IPs are stored), the
+  cost and the full note.
+- `scripts/sync_live_db.py --target <hosted URL>` copies `daily_bars` and
+  `universe_snapshot` to the hosted database. Re-run it after every ingest.
+
+```
+uvicorn falsify.live.app:app --reload     # needs DATABASE_URL, ANTHROPIC_API_KEY, ADMIN_TOKEN, VISITOR_SALT
+```

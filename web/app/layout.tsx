@@ -4,34 +4,43 @@ import "./globals.css";
 import { REPO, snapshot } from "@/lib/data";
 
 export const metadata: Metadata = {
-  title: "falsify: an agent that tries to disprove market hypotheses",
+  title: "falsify · a research agent built to disprove its own hypotheses",
   description:
-    "Six published equity anomalies, pre-registered and scored honestly, with the failures shown.",
+    "Six published equity anomalies, pre-registered and scored with deflated Sharpe and multiple-testing correction. The failures are shown.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const commit = snapshot.code_commit ?? "main";
   return (
     <html lang="en">
       <body>
+        <header className="topbar">
+          <div className="wrap">
+            <Link href="/" className="brand">
+              <span className="brand-mark">f</span>falsify
+            </Link>
+            <nav className="nav">
+              <Link href="/#evals">Eval suite</Link>
+              <Link href="/notes/">Notes</Link>
+              <Link href="/#method">Method</Link>
+              <a href={REPO}>GitHub</a>
+              <Link href="/try/" className="cta">Try it live</Link>
+            </nav>
+          </div>
+        </header>
         <main>
-          <nav className="top">
-            <Link href="/" className="brand">falsify</Link>
-            <Link href="/#evals">Eval suite</Link>
-            <Link href="/notes/">Research notes</Link>
-            <Link href="/#method">Method</Link>
-            <a href={REPO}>Source</a>
-          </nav>
-          {children}
-          <footer>
-            Frozen {snapshot.generated_at.slice(0, 10)} from commit{" "}
-            <a className="mono" href={`${REPO}/tree/${(snapshot.code_commit ?? "main").replace("-dirty", "")}`}>
-              {snapshot.code_commit ?? "unknown"}
-            </a>
-            . Registry sha256 <span className="mono">{snapshot.registry_sha.slice(0, 16)}</span>.
-            Nothing on this page is computed in your browser: every figure was produced by the
-            pipeline and exported by <code>scripts/export_demo.py</code>.
-          </footer>
+          <div className="wrap">{children}</div>
         </main>
+        <footer className="site">
+          <div className="wrap">
+            <span>
+              Evidence frozen {snapshot.generated_at.slice(0, 10)} from commit{" "}
+              <a className="mono" href={`${REPO}/tree/${commit.replace("-dirty", "")}`}>{commit}</a> · pre-registration sha256{" "}
+              <span className="mono">{snapshot.registry_sha.slice(0, 12)}</span>
+            </span>
+            <span>Nothing on the published pages is computed in your browser. Built by Pranshu Sheel.</span>
+          </div>
+        </footer>
       </body>
     </html>
   );
