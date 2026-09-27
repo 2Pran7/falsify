@@ -224,3 +224,54 @@ def truncate_suspect_tickers(
         .sort("ticker")
     )
     return clean, report
+
+
+# A trailing date needs at least this fraction of the typical cross-section.
+MIN_TAIL_COVERAGE = 0.5
+
+
+def trim_ragged_end(
+    panel: pl.DataFrame, min_coverage: float = MIN_TAIL_COVERAGE
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Drop the thin dates at the END of a panel, where only a few tickers have prices.
+
+    Args:
+        panel: long price frame with ticker and ts.
+        min_coverage: a trailing date is kept only if its ticker count is at
+            least this fraction of the median count across the panel.
+
+    Returns:
+        (trimmed, dropped). `dropped` has one row per removed date: ts,
+        n_tickers.
+
+    WHY. Ingest runs per ticker and stamps each with its own end date, so a
+    single re-ingest (BNY, 27 Sep) extends ONE ticker two weeks past the rest.
+    Every date in that tail then holds a cross-section of a handful of names,
+    and a decile sort over four names is ten buckets of noise traded as if it
+    were a strategy. Nothing downstream would notice: the dates look like
+    ordinary trading days. It also moved the survivorship coverage window, which
+    is how it was found.
+
+    ONLY THE TAIL. A thin date in the MIDDLE of the panel is a different defect
+    (a failed fetch across many tickers) and is left for the coverage checks to
+    report, not silently removed here. Trimming stops at the last date that
+    clears the bar, so the kept panel is always a prefix of the dates.
+
+    The median is taken over the whole panel. That is not a lookahead concern:
+    the dates removed are the last ones in the data, so there is no later data
+    for the decision to borrow from.
+    """
+    counts = panel.group_by("ts").agg(pl.col("ticker").n_unique().alias("n_tickers")).sort("ts")
+    empty = pl.DataFrame(schema={"ts": panel.schema["ts"], "n_tickers": pl.UInt32})
+    if counts.height == 0:
+        return panel, empty
+    floor = float(counts["n_tickers"].median()) * min_coverage
+    ok = (counts["n_tickers"] >= floor).to_list()
+    last_ok = max((i for i, v in enumerate(ok) if v), default=-1)
+    if last_ok == counts.height - 1:
+        return panel, empty
+    dropped = counts[last_ok + 1 :].with_columns(pl.col("n_tickers").cast(pl.UInt32))
+    if last_ok < 0:
+        return panel.clear(), dropped
+    cutoff = counts["ts"][last_ok]
+    return panel.filter(pl.col("ts") <= cutoff), dropped

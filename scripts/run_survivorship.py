@@ -70,7 +70,7 @@ from falsify.backtest import metrics as m
 from falsify.backtest.engine import BacktestConfig, run_backtest
 from falsify.backtest.loader import load_panel
 from falsify.data.pit_universe import members_as_of, membership_panel, parse_snapshots
-from falsify.data.quality import drop_suspect_tickers, truncate_suspect_tickers
+from falsify.data.quality import drop_suspect_tickers, trim_ragged_end, truncate_suspect_tickers
 from falsify.stats.survivorship import coverage_report, survivorship_gap
 
 DEFAULT_SINCE = dt.date(2024, 9, 1)
@@ -165,6 +165,13 @@ def main() -> None:
     if panel.is_empty():
         raise SystemExit("daily_bars is empty. Run scripts/run_ingest.py first.")
     universe = panel.filter(pl.col("ticker") != BENCHMARK)
+    # Before the coverage check, which takes its window from the panel's dates:
+    # one late-ingested ticker otherwise drags the window past everyone else's
+    # prices and the gate blocks on members nobody could have priced yet.
+    universe, tail = trim_ragged_end(universe)
+    if tail.height:
+        print(f"trimmed {tail.height} thin trailing date(s) "
+              f"(at most {tail['n_tickers'].max()} tickers priced on any of them)")
     print(
         f"ingested: {universe['ticker'].n_unique()} tickers, "
         f"{universe['ts'].min()} to {universe['ts'].max()}"

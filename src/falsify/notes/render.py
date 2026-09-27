@@ -102,7 +102,9 @@ def _statistics_table(note: Note) -> str:
     footer = (
         "\n\nBoth `P(` columns are **probabilities in [0, 1], not Sharpe ratios**. "
         "`P(beats best of N)` is the deflated Sharpe result: below 0.50 the "
-        "evidence does not survive the number of strategies tried. `MinTRL` is "
+        "result is likelier than not no better than the best of N worthless "
+        "strategies, and confirming an effect takes 0.95, the eval suite's gate. "
+        "Anything between is not support. `MinTRL` is "
         "how much data would be needed before the Sharpe could be told apart "
         "from zero at 95% — compare it to the invested days above.\n"
     )

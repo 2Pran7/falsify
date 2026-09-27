@@ -133,8 +133,9 @@ def _print_stats(result) -> None:
 
     print(
         f"\n  P(SR>0) and P(beats N) are PROBABILITIES, not Sharpe ratios.\n"
-        f"  P(beats N) is the deflated Sharpe: below 0.5 the evidence does not\n"
-        f"  survive having tried {n} strateg{'y' if n == 1 else 'ies'}.\n"
+        f"  P(beats N) is the deflated Sharpe. Below 0.5 the result is likelier\n"
+        f"  than not no better than the best of {n} worthless strateg{'y' if n == 1 else 'ies'};\n"
+        f"  confirming an effect takes 0.95, the eval suite's gate.\n"
         f"  MinTRL is days of data needed before the Sharpe is distinguishable\n"
         f"  from zero at 95%. Compare it to the invested days above."
     )

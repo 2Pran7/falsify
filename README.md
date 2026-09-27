@@ -17,13 +17,13 @@ worth solving is building one that refuses to.
 | Agent | Model-driven hypothesis to experiment to research note, four tools, five cost guards | Complete |
 | Research notes | Verified notes persisted to Postgres, publishable rule, markdown rendering | Complete |
 | Eval suite | Six published anomalies, pre-registered and hashed; four-rule scoring; universe argument | Harness complete, 120 tests. **Results blocked on a longer panel** |
-| Demo | Frozen eval verdicts and research notes, served as a static Next.js page; point-in-time splice gate | Complete, 28 tests, 12 injections |
+| Demo | Frozen eval verdicts and research notes, served as a static Next.js page; point-in-time splice gate | Complete, 34 tests, 14 injections |
 
-Full suite: **519 passing, 34 skipped** on a fresh clone with no database;
-**550 passing, 3 skipped** with Postgres up (the three need ingested SPY
+Full suite: **525 passing, 34 skipped** on a fresh clone with no database;
+**556 passing, 3 skipped** with Postgres up (the three need ingested SPY
 prices). Every new suite from Module 3 onward was validated by injecting the
 bug it claims to catch: `scripts/inject_module6.py` catches 19 of 19 and
-`scripts/inject_module7.py` 12 of 12, and CI runs both on every push.
+`scripts/inject_module7.py` 14 of 14, and CI runs both on every push.
 
 **The headline result.** Reconstructing point-in-time S&P 500 membership from
 the git history of the constituents CSV — 193 dated snapshots back to 2012, no
@@ -63,7 +63,11 @@ on any date T gives exactly what the full-panel gate keeps up to T. A control
 test shows the old gate failing the same property. It is applied inside
 `agent/tools.fetch_data`, so the agent and the eval suite both see it; before
 Module 7 that path had no splice gate at all. `--whole-sample-gate` on the two
-Module 3 scripts reproduces the original figures.
+Module 3 scripts reproduces the original figures. A second check trims a
+**ragged panel end**: one ticker ingested later than the rest leaves trailing
+dates with a handful of names each, and a decile sort over four names is noise
+traded as a strategy. Only the tail is trimmed; interior holes are left for the
+coverage checks to report.
 
 **The model decides, and that is enforced rather than asserted.** Four
 mechanisms, in increasing order of strength: the tool menu is closed (a dict of
@@ -102,7 +106,7 @@ docker compose up -d        # TimescaleDB; schema applies on first run
 Verify:
 
 ```bash
-pytest -q                                   # 550 passing, 3 more once SPY is ingested
+pytest -q                                   # 556 passing, 3 more once SPY is ingested
 python scripts/run_ingest.py AAPL MSFT      # two-ticker smoke test
 
 docker exec -it falsify-db psql -U falsify -c \
@@ -195,7 +199,7 @@ scripts/run_evals.py        the eval suite: --compare, --check, --store, --regis
 scripts/diagnose_membership.py  snapshot gaps, member-day clusters, membership resolution
 scripts/ingest_dropped.py   prices for the names that LEFT the index
 scripts/inject_module6.py   the nineteen-injection audit, re-runnable
-scripts/inject_module7.py   twelve more: the splice gate and every export refusal
+scripts/inject_module7.py   fourteen more: the splice gate, the ragged end, every export refusal
 scripts/export_demo.py      Postgres -> web/data/demo.json for the static page
 web/                        Next.js static export; renders data/demo.json, computes nothing
 tests/                      synthetic data with hand-computed expected values

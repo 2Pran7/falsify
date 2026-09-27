@@ -67,7 +67,12 @@ def test_probabilities_and_sharpe_ratios_are_in_separate_tables():
 def test_the_statistics_table_says_the_p_columns_are_not_sharpe_ratios():
     md = to_markdown(a_note())
     assert "not Sharpe ratios" in md
-    assert "below 0.50 the evidence does not survive" in md.replace("\n", " ")
+    flat = md.replace("\n", " ")
+    assert "below 0.50 the result is likelier than not no better" in flat
+    # 0.5 is a floor, not a pass mark. A note that called 0.579 "above the
+    # threshold" was published on 27 Sep because every text the model read
+    # named 0.5 and none named the 0.95 gate the eval suite actually uses.
+    assert "confirming an effect takes 0.95" in flat
 
 
 def test_the_trial_variance_assumption_is_printed_under_the_table_it_governs():

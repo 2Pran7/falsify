@@ -27,7 +27,7 @@ from falsify.backtest.portfolio import (
     hold_until_next_rebalance,
     month_end_dates,
 )
-from falsify.data.quality import drop_suspect_tickers, truncate_suspect_tickers
+from falsify.data.quality import drop_suspect_tickers, trim_ragged_end, truncate_suspect_tickers
 from falsify.features.library import add_momentum_12_1
 from falsify.stats.survivorship import restrict_to_members
 
@@ -137,6 +137,10 @@ def main() -> None:
         return
 
     universe = panel.filter(pl.col("ticker") != BENCHMARK)
+    universe, tail = trim_ragged_end(universe)
+    if tail.height:
+        print(f"trimmed {tail.height} thin trailing date(s) after {universe['ts'].max()} "
+              f"(max {tail['n_tickers'].max()} tickers priced)")
     print(
         f"universe: {universe['ticker'].n_unique()} tickers, "
         f"{len(universe):,} rows, {universe['ts'].min()} to {universe['ts'].max()}"

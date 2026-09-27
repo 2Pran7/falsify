@@ -64,6 +64,18 @@ INJECTIONS = [
      "    gated = gated.with_columns(pl.lit(0).alias(\"rows_dropped\"))",
      TT),
 
+    ("fetch_data ignores a ragged panel end",
+     TOOLS,
+     "    frame, tail = trim_ragged_end(frame)",
+     "    _, tail = trim_ragged_end(frame)",
+     TT),
+
+    ("ragged-end trim keeps every thin trailing date",
+     Q,
+     "    floor = float(counts[\"n_tickers\"].median()) * min_coverage",
+     "    floor = 0.0",
+     TQ),
+
     # --- the export's refusals --------------------------------------------
     ("export accepts rows scored against an edited registry",
      DEMO, "    if stale:", "    if False:", TD),

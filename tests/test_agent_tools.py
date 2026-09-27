@@ -253,6 +253,28 @@ def test_fetch_data_reports_a_clean_gate_as_zero_not_absent(s, patched):
     assert out["n_rows_dropped_by_gate"] == 0
 
 
+def test_fetch_data_trims_a_ragged_end_and_says_so(s, monkeypatch):
+    """One ticker priced 5 days past the rest must not become five days of a
+    one-name cross-section."""
+    base = _panel()
+    last = base["ts"].max()
+    extra = pl.DataFrame(
+        {
+            "ticker": ["T00"] * 5,
+            "ts": [last + dt.timedelta(days=k) for k in range(1, 6)],
+            "close": [100.0] * 5,
+        }
+    ).with_columns(pl.col("ts").cast(base.schema["ts"]))
+    monkeypatch.setattr(T, "load_panel", lambda *a, **k: pl.concat([base, extra]))
+    out = T.fetch_data(s)
+    assert out["n_thin_tail_dates_trimmed"] == 5
+    assert out["last_date"] == str(last)
+
+
+def test_fetch_data_reports_a_full_panel_as_zero_trimmed(s, patched):
+    assert T.fetch_data(s)["n_thin_tail_dates_trimmed"] == 0
+
+
 def test_the_panel_is_reachable_through_the_session(s, patched):
     """Module 6 wrapped the stored frame in a Panel, which carries the universe.
 

@@ -81,8 +81,11 @@ only those numbers.
 
 analyze_results returns probabilities, not Sharpe ratios. \
 prob_sharpe_above_zero and prob_beats_best_of_n_trials are both in [0,1]. \
-prob_beats_best_of_n_trials IS the deflated Sharpe result, and below 0.5 means \
-the evidence does not survive the number of strategies tried. Never place these \
+prob_beats_best_of_n_trials IS the deflated Sharpe result. Below 0.5 it is more \
+likely than not that the result is no better than the best of the worthless \
+strategies tried. Above 0.5 is NOT support: confirming an effect takes 0.95, the \
+gate the eval suite applies, so never describe 0.5 as a threshold that was \
+cleared. Never place these \
 in the same column as a Sharpe ratio or compare them to one.
 
 A LONG-ONLY result is not a test of a cross-sectional hypothesis. Long-only \

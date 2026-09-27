@@ -45,7 +45,7 @@ from falsify.backtest.portfolio import (
     month_end_dates,
 )
 from falsify.data.pit_universe import membership_panel
-from falsify.data.quality import truncate_suspect_tickers
+from falsify.data.quality import trim_ragged_end, truncate_suspect_tickers
 from falsify.features import library as feat
 from falsify.stats import deflated
 from falsify.stats.survivorship import restrict_to_members
@@ -503,6 +503,9 @@ def fetch_data(
     # feature sees the frame, and reported in the digest, because an exclusion
     # nobody is told about is a silent change to the universe.
     frame, gated = truncate_suspect_tickers(frame)
+    # FOURTH: a ragged end. One ticker ingested later than the rest leaves a
+    # tail of dates with a handful of names each; see quality.trim_ragged_end.
+    frame, tail = trim_ragged_end(frame)
 
     summary = {
         "n_rows": len(frame),
@@ -512,6 +515,7 @@ def fetch_data(
         "universe": universe,
         "n_tickers_truncated": gated.height,
         "n_rows_dropped_by_gate": int(gated["rows_dropped"].sum()) if gated.height else 0,
+        "n_thin_tail_dates_trimmed": tail.height,
     }
 
     membership = None
@@ -823,8 +827,10 @@ def analyze_results(
             "prob_* fields are probabilities in [0,1], NOT Sharpe ratios. "
             "prob_beats_best_of_n_trials is the deflated Sharpe: the probability "
             "this strategy's true Sharpe beats what the best of n_trials worthless "
-            "strategies would have printed. Below 0.5 means the evidence does not "
-            "survive the number of things tried. Never tabulate these beside a "
+            "strategies would have printed. Below 0.5 it is more likely than not that "
+            "the result is no better than the best of the worthless strategies tried; "
+            "confirming an effect takes 0.95, the eval suite's gate, and anything "
+            "between is not support. Never tabulate these beside a "
             "Sharpe ratio as though they shared units."
         ),
         "n_trials_note": (

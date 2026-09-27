@@ -16,6 +16,7 @@ from falsify.data.quality import (
     drop_suspect_tickers,
     flag_suspect_tickers,
     level_shifts,
+    trim_ragged_end,
     truncate_suspect_tickers,
 )
 
@@ -205,3 +206,48 @@ def test_the_whole_sample_gate_fails_the_same_property():
     t = D0 + dt.timedelta(days=10)
     at_t, _ = drop_suspect_tickers(panel.filter(pl.col("ts") <= t))
     assert not _cut(at_t, t).equals(_cut(full, t))
+
+
+# --- the ragged end (found 27 Sep: one re-ingested ticker ran two weeks past the rest)
+
+
+def _wide(n_tickers: int, days: range) -> dict[str, list[tuple[int, float]]]:
+    return {f"T{i}": [(d, 100.0 + d) for d in days] for i in range(n_tickers)}
+
+
+def test_a_thin_tail_is_trimmed_and_reported():
+    series = _wide(10, range(0, 20))
+    series["BNY"] = [(d, 50.0) for d in range(0, 34)]  # runs 14 days past everyone
+    clean, dropped = trim_ragged_end(_panel(series))
+    assert clean["ts"].max() == D0 + dt.timedelta(days=19)
+    assert dropped.height == 14
+    assert dropped["n_tickers"].max() == 1
+
+
+def test_a_thin_date_in_the_middle_is_left_alone():
+    """Interior holes are a coverage defect for the coverage checks to report,
+    not something to delete silently."""
+    series = _wide(10, range(0, 10))
+    for i in range(10):
+        series[f"T{i}"] += [(d, 1.0) for d in range(12, 20)]
+    series["T0"].append((10, 1.0))  # day 10: one ticker only
+    panel = _panel(series)
+    clean, dropped = trim_ragged_end(panel)
+    assert clean.equals(panel)
+    assert dropped.is_empty()
+
+
+def test_a_full_panel_is_the_identity_with_a_typed_report():
+    panel = _panel(_wide(5, range(0, 10)))
+    clean, dropped = trim_ragged_end(panel)
+    assert clean.equals(panel)
+    assert dropped.schema["n_tickers"] == pl.UInt32
+
+
+def test_the_kept_panel_is_a_prefix_of_the_dates():
+    series = _wide(10, range(0, 20))
+    series["X"] = [(d, 1.0) for d in range(0, 30)]
+    panel = _panel(series)
+    clean, _ = trim_ragged_end(panel)
+    kept = clean["ts"].unique().sort().to_list()
+    assert kept == panel["ts"].unique().sort().to_list()[: len(kept)]
