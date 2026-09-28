@@ -76,6 +76,18 @@ INJECTIONS = [
      "    floor = 0.0",
      TQ),
 
+    ("the analysis reminder is never sent",
+     "src/falsify/agent/loop.py",
+     "            and result.analysis_nudges < config.max_analysis_nudges",
+     "            and False",
+     "tests/test_agent_loop.py"),
+
+    ("the analysis reminder repeats until the model complies",
+     "src/falsify/agent/loop.py",
+     "            and result.analysis_nudges < config.max_analysis_nudges",
+     "            and result.analysis_nudges < 5",
+     "tests/test_agent_loop.py"),
+
     # --- the export's refusals --------------------------------------------
     ("export accepts rows scored against an edited registry",
      DEMO, "    if stale:", "    if False:", TD),

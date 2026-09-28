@@ -430,3 +430,52 @@ def test_assistant_blocks_are_serialisable(patched):
         ]
     )
     json.dumps(L.run("q", client).messages, default=str)
+
+
+# --- the analysis nudge (28 Sep: a live run announced the step and stopped) ---
+
+
+def _backtest_then(*tail):
+    return [
+        response([tool_block("fetch_data", {}, "a")], "tool_use"),
+        response([tool_block("compute_feature", {"panel_handle": "panel_1", "feature": "mom_12_1"}, "b")], "tool_use"),
+        response([tool_block("run_backtest", {"feature_handle": "feature_1"}, "c")], "tool_use"),
+        *tail,
+    ]
+
+
+def test_a_model_that_announces_analysis_and_stops_is_reminded_once(patched):
+    client = FakeClient(_backtest_then(
+        response([text_block("Now I'll run the rigour analysis.")], "end_turn"),
+        response([tool_block("analyze_results", {"backtest_handle": "backtest_1"}, "d")], "tool_use"),
+        response([text_block("Deflated, the evidence is insufficient.")], "end_turn"),
+    ))
+    r = L.run("is momentum real?", client)
+    assert r.analysis_nudges == 1
+    assert r.completed
+    assert [c["name"] for c in r.tool_calls][-1] == "analyze_results"
+    assert r.answer == "Deflated, the evidence is insufficient."
+    reminders = [m for m in r.messages if m["role"] == "user" and m["content"] == L.NUDGE_ANALYZE]
+    assert len(reminders) == 1
+
+
+def test_the_reminder_is_given_once_and_never_forces_an_answer(patched):
+    """A model that stops twice stops. The note is then refused by the
+    publishable rule, exactly as before the nudge existed."""
+    client = FakeClient(_backtest_then(
+        response([text_block("Done.")], "end_turn"),
+    ))
+    r = L.run("is momentum real?", client)
+    assert r.analysis_nudges == 1
+    assert r.completed and r.answer == "Done."
+    assert "analyze_results" not in [c["name"] for c in r.tool_calls]
+
+
+def test_no_reminder_without_backtests_or_after_analysis(patched):
+    plain = L.run("hello?", FakeClient([response([text_block("No data needed.")], "end_turn")]))
+    assert plain.analysis_nudges == 0
+    done = L.run("is momentum real?", FakeClient(_backtest_then(
+        response([tool_block("analyze_results", {"backtest_handle": "backtest_1"}, "d")], "tool_use"),
+        response([text_block("Insufficient.")], "end_turn"),
+    )))
+    assert done.analysis_nudges == 0

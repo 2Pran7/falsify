@@ -111,6 +111,13 @@ be needed to make it convincing.
 """
 
 
+NUDGE_ANALYZE = (
+    "You ran backtests but have not called analyze_results, so nothing you "
+    "concluded has been adjusted for the number of strategies tried. Call "
+    "analyze_results on the backtests you rely on, then give your final answer."
+)
+
+
 @dataclass(frozen=True)
 class RunConfig:
     """The guards, as numbers.
@@ -125,6 +132,10 @@ class RunConfig:
     max_total_tokens: int = 200_000
     max_output_tokens: int = 2_048
     max_repeated_errors: int = 2
+    # How many times the loop may remind a model that tried to finish with
+    # unanalysed backtests. One: a reminder is a nudge, not a way to force an
+    # answer out of a model that will not give it.
+    max_analysis_nudges: int = 1
 
 
 @dataclass
@@ -146,6 +157,7 @@ class RunResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     messages: list[dict[str, Any]] = field(default_factory=list)
     session: Session | None = None
+    analysis_nudges: int = 0
 
     @property
     def cost_usd(self) -> float:
@@ -276,6 +288,25 @@ def run(
         result.output_tokens += getattr(usage, "output_tokens", 0) or 0
         result.cache_write_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
         result.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
+
+        # The model wants to stop. One check first: it ran backtests but never
+        # called analyze_results, so any conclusion would rest on a raw Sharpe.
+        # Seen live on 28 Sep: the model wrote "I'll run the rigour analysis
+        # now" as its FINAL text and ended the turn without the call. It gets
+        # one reminder. If it still stops, the note is refused as before; the
+        # reminder never relaxes the publishable rule, it only stops a
+        # sentence that announced a step from standing in for the step.
+        analysed = any(c["name"] == "analyze_results" and c["ok"] for c in result.tool_calls)
+        if (
+            response.stop_reason != "tool_use"
+            and session.handles("backtest")
+            and not analysed
+            and result.analysis_nudges < config.max_analysis_nudges
+        ):
+            result.analysis_nudges += 1
+            messages.append({"role": "assistant", "content": _blocks_to_dicts(response.content)})
+            messages.append({"role": "user", "content": NUDGE_ANALYZE})
+            continue
 
         # The model is done.
         if response.stop_reason != "tool_use":
