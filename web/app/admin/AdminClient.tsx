@@ -8,7 +8,8 @@ import type { NoteView } from "@/lib/types";
 
 type Row = {
   run_id: string; created_at: string; finished_at: string | null; visitor: string; display_name: string | null;
-  hypothesis: string; status: string; note: NoteView | null; error: string | null; cost_usd: number;
+  hypothesis: string; status: string; note: (NoteView & { tool_errors?: { tool: string; error: string }[] }) | null;
+  error: string | null; cost_usd: number;
 };
 type Payload = { runs: Row[]; spent_today_usd: number; limits: { daily_usd_cap: number; daily_run_cap: number; per_visitor_cap: number } };
 
@@ -71,7 +72,13 @@ export function AdminClient() {
               <tbody>
                 {data.runs.map((r) => (
                   <tr key={r.run_id} className="link" onClick={() => setOpen(open === r.run_id ? null : r.run_id)}>
-                    <td><span className="cell-title">{r.hypothesis}</span>{r.error && <div className="cell-sub" style={{ color: "var(--fail)" }}>{r.error}</div>}</td>
+                    <td>
+                      <span className="cell-title">{r.hypothesis}</span>
+                      {r.error && <div className="cell-sub" style={{ color: "var(--fail)" }}>{r.error}</div>}
+                      {r.note?.tool_errors?.slice(0, 2).map((e, i) => (
+                        <div key={i} className="cell-sub mono" style={{ color: "var(--fail)" }}>{e.tool}: {e.error}</div>
+                      ))}
+                    </td>
                     <td className="small">{r.display_name ?? <span className="muted">anonymous</span>}<div className="cell-sub mono">{r.visitor}</div></td>
                     <td className="num">{r.created_at.slice(0, 16).replace("T", " ")}</td>
                     <td className="num">${r.cost_usd.toFixed(3)}</td>

@@ -37,7 +37,16 @@ def agent_runner(client_factory: Callable[[], Any]) -> Runner:
         result = run(hypothesis, client_factory(), session=session, config=cfg)
         note = from_run(result, hypothesis=hypothesis,
                         provenance_report=check_run(result), session=session)
-        return note_record(note), float(result.cost_usd)
+        rec = note_record(note)
+        # The tool errors, verbatim, for the OWNER. A run stopped by the
+        # repeated-error guard otherwise says only "repeated_error", which is
+        # the guard's name, not the fault's. The visitor view strips this key.
+        rec["tool_errors"] = [
+            {"tool": c["name"], "error": str(c.get("error", ""))[:500]}
+            for c in result.tool_calls
+            if not c.get("ok")
+        ]
+        return rec, float(result.cost_usd)
 
     return _run
 

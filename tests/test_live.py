@@ -254,3 +254,27 @@ def test_pg_store_round_trip_and_today_counts():
         with psycopg.connect(DSN) as c:
             c.execute("DELETE FROM live_run WHERE visitor=%s", (vid,))
             c.commit()
+
+
+def test_tool_errors_reach_the_owner_but_not_the_visitor():
+    def runner(h):
+        return dict(NOTE, tool_errors=[{"tool": "fetch_data", "error": "no rows matched"}]), 0.01
+    app, store, c = _app(runner=runner)
+    rid = _submit(c).json()["run_id"]
+    app.state.worker.process_one(rid)
+    assert "tool_errors" not in c.get(f"/runs/{rid}").json()["note"]
+    admin = c.get("/admin/runs", headers={"Authorization": f"Bearer {TOKEN}"}).json()
+    assert admin["runs"][0]["note"]["tool_errors"][0]["error"] == "no rows matched"
+
+
+def test_agent_runner_records_a_failing_tool_verbatim(monkeypatch):
+    from falsify.agent import tools as T
+    from falsify.live.worker import agent_runner
+    from tests.test_agent_loop import FakeClient, response, tool_block
+    import polars as pl
+
+    monkeypatch.setattr(T, "load_panel", lambda *a, **k: pl.DataFrame(schema={"ticker": pl.Utf8, "ts": pl.Date, "close": pl.Float64}))
+    script = [response([tool_block("fetch_data", {}, "a")], "tool_use")]
+    note, _ = agent_runner(lambda: FakeClient(script))("Do past winners keep winning?")
+    assert note["run"]["stop_reason"] == "repeated_error"
+    assert "no rows matched" in note["tool_errors"][0]["error"]

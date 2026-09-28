@@ -34,13 +34,17 @@ class Submit(BaseModel):
 
 
 def _public(row: dict) -> dict:
-    """What a visitor may see about their own run. No visitor id, no name echo."""
+    """What a visitor may see about their own run. No visitor id, no name echo,
+    and no raw tool errors: those can name tables and hosts, and are for the owner."""
+    note = row["note"]
+    if isinstance(note, dict):
+        note = {k: v for k, v in note.items() if k != "tool_errors"}
     return {
         "run_id": row["run_id"],
         "status": row["status"],
         "hypothesis": row["hypothesis"],
         "created_at": row["created_at"].isoformat(),
-        "note": row["note"],
+        "note": note,
         "error": "The run failed on the server. Try again later." if row["error"] else None,
     }
 

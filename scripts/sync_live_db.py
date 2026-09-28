@@ -77,8 +77,21 @@ def main() -> int:
         dst.execute(LIVE_SCHEMA)
         for t in TABLES:
             dst.execute(f"TRUNCATE {t}")
-            with src.cursor().copy(f"COPY {t} TO STDOUT (FORMAT BINARY)") as out, \
-                 dst.cursor().copy(f"COPY {t} FROM STDIN (FORMAT BINARY)") as inp:
+            # COPY (SELECT ...), never COPY <table>. daily_bars is a TimescaleDB
+            # hypertable locally: its rows live in chunk tables, and a plain
+            # COPY of the parent reads zero rows and succeeds. That is what the
+            # first real sync did, and only the row-count check below caught it.
+            # Columns are named on both sides so the two schemas cannot pair
+            # them up in a different order.
+            cols = ", ".join(
+                r[0] for r in src.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = %s AND table_schema = 'public' ORDER BY ordinal_position",
+                    (t,),
+                ).fetchall()
+            )
+            with src.cursor().copy(f"COPY (SELECT {cols} FROM {t}) TO STDOUT (FORMAT BINARY)") as out, \
+                 dst.cursor().copy(f"COPY {t} ({cols}) FROM STDIN (FORMAT BINARY)") as inp:
                 for chunk in out:
                     inp.write(chunk)
             print(f"copied {t}")
