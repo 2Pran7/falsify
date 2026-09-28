@@ -15,6 +15,7 @@ const EXAMPLES = [
   "Do last month's losers bounce back this month?",
   "Do stocks near their 52-week high keep outperforming?",
 ];
+const WAKE_LIMIT_MS = 120_000;
 const STEPS: [Run["status"], string][] = [["queued", "Queued"], ["running", "Running the agent"], ["done", "Note written"]];
 
 export function TryClient() {
@@ -27,11 +28,44 @@ export function TryClient() {
   const [waking, setWaking] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * Wait until the server answers, for up to WAKE_LIMIT_MS. The free host sleeps
+   * after 15 idle minutes and is briefly down during a redeploy; either way the
+   * visitor should see "waking", never a dead end. Returns false only if it
+   * stayed unreachable for the whole window.
+   */
+  async function wake(): Promise<boolean> {
+    const started = Date.now();
+    const slow = setTimeout(() => setWaking(true), 2500);
+    try {
+      while (Date.now() - started < WAKE_LIMIT_MS) {
+        try {
+          const ctl = new AbortController();
+          const cut = setTimeout(() => ctl.abort(), 20000);
+          const r = await fetch(`${API_URL}/health`, { signal: ctl.signal, cache: "no-store" });
+          clearTimeout(cut);
+          if (r.ok) {
+            const d = await r.json();
+            setLeft(d.runs_left_for_you_today);
+            return true;
+          }
+        } catch {}
+        await new Promise((res) => setTimeout(res, 4000));
+      }
+      return false;
+    } finally {
+      clearTimeout(slow);
+      setWaking(false);
+    }
+  }
+
   useEffect(() => {
     if (!API_URL) return;
-    const t = setTimeout(() => setWaking(true), 2500);
-    fetch(`${API_URL}/health`).then((r) => r.json()).then((d) => setLeft(d.runs_left_for_you_today)).catch(() => {}).finally(() => { clearTimeout(t); setWaking(false); });
-    return () => { clearTimeout(t); if (timer.current) clearTimeout(timer.current); };
+    // Start waking the server the moment the page opens, so that by the time
+    // the visitor has typed a question it is usually already up.
+    wake();
+    return () => { if (timer.current) clearTimeout(timer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function poll(id: string) {
@@ -46,22 +80,36 @@ export function TryClient() {
     }
   }
 
+  async function post(): Promise<Response> {
+    return fetch(`${API_URL}/runs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hypothesis: text, name: name || null }),
+    });
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null); setRun(null); setBusy(true);
-    try {
-      const r = await fetch(`${API_URL}/runs`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hypothesis: text, name: name || null }),
-      });
-      const d = await r.json();
-      if (!r.ok) { setError(d.detail ?? "Something went wrong."); setBusy(false); return; }
-      setRun({ run_id: d.run_id, status: "queued", hypothesis: text, note: null, error: null });
-      poll(d.run_id);
-    } catch {
-      setError("Couldn't reach the server. It sleeps when idle and takes about a minute to wake; try again shortly.");
-      setBusy(false);
+    let r: Response | null = null;
+    // Two attempts with a wake in between. A network failure means the server
+    // is asleep or mid-deploy, not that the question was bad, so the visitor
+    // waits rather than being told to come back later.
+    for (let attempt = 0; attempt < 2 && r === null; attempt++) {
+      try {
+        r = await post();
+      } catch {
+        if (attempt === 0 && !(await wake())) break;
+      }
     }
+    if (r === null) {
+      setError("The server hasn't answered for two minutes, which is unusual. Please try again in a few minutes.");
+      setBusy(false);
+      return;
+    }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { setError(d.detail ?? "Something went wrong."); setBusy(false); return; }
+    setRun({ run_id: d.run_id, status: "queued", hypothesis: text, note: null, error: null });
+    poll(d.run_id);
   }
 
   const stepIndex = run ? STEPS.findIndex(([s]) => s === run.status) : -1;
@@ -91,10 +139,10 @@ export function TryClient() {
           </div>
           <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 20, flexWrap: "wrap" }}>
             <button className="btn primary" type="submit" disabled={busy || text.trim().length < 12 || left === 0}>
-              {busy ? <><span className="spinner" /> Running</> : "Run the agent"}
+              {busy ? <><span className="spinner" /> {waking ? "Waking server" : "Running"}</> : "Run the agent"}
             </button>
             <span className="small muted">
-              {waking ? "Waking the server (about a minute after it has been idle)…" : left === null ? "" : left === 0 ? "No runs left today; resets at midnight UTC." : `${left} run${left === 1 ? "" : "s"} left for you today.`}
+              {waking ? "Waking the server; this takes up to a minute if nobody has used it recently…" : left === null ? "" : left === 0 ? "No runs left today; resets at midnight UTC." : `${left} run${left === 1 ? "" : "s"} left for you today.`}
             </span>
           </div>
           {error && <div className="error">{error}</div>}
