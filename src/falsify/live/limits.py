@@ -53,7 +53,7 @@ class Refused(Exception):
 class Limits:
     daily_usd_cap: float = 2.0
     daily_run_cap: int = 25
-    per_visitor_cap: int = 3
+    per_visitor_cap: int = 10
     max_queue: int = 5
 
 

@@ -146,7 +146,7 @@ def _from_env() -> FastAPI:
         lim=L.Limits(
             daily_usd_cap=float(os.environ.get("LIVE_DAILY_USD_CAP", "2.0")),
             daily_run_cap=int(os.environ.get("LIVE_DAILY_RUN_CAP", "25")),
-            per_visitor_cap=int(os.environ.get("LIVE_PER_VISITOR_CAP", "3")),
+            per_visitor_cap=int(os.environ.get("LIVE_PER_VISITOR_CAP", "10")),
         ),
     )
 

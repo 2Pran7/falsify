@@ -23,5 +23,7 @@ services:
         value: https://falsify-ten.vercel.app,http://localhost:3000
       - key: LIVE_DAILY_USD_CAP
         value: "2.0"
+      - key: LIVE_PER_VISITOR_CAP
+        value: "10"
       - key: POLYGON_API_KEY
         value: not-used-by-the-live-server
