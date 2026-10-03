@@ -278,3 +278,19 @@ def test_agent_runner_records_a_failing_tool_verbatim(monkeypatch):
     note, _ = agent_runner(lambda: FakeClient(script))("Do past winners keep winning?")
     assert note["run"]["stop_reason"] == "repeated_error"
     assert "no rows matched" in note["tool_errors"][0]["error"]
+
+
+def test_default_panel_floor_is_years_before_today():
+    import datetime as dt
+
+    from falsify.live.app import default_panel_floor
+
+    assert default_panel_floor(dt.date(2026, 10, 4), 3.25) == "2023-07-05"
+
+
+def test_loader_rejects_unknown_or_insufficient_columns():
+    from falsify.backtest.loader import load_panel
+
+    for bad in (("ticker", "ts", "price"), ("close",)):
+        with pytest.raises(ValueError):
+            load_panel(columns=bad, dsn="postgresql://never-connected")

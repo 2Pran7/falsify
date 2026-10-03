@@ -33,6 +33,7 @@ def load_panel(
     start: dt.date | str | None = None,
     end: dt.date | str | None = None,
     dsn: str | None = None,
+    columns: "tuple[str, ...] | list[str]" = tuple(BAR_COLUMNS),
 ) -> pl.DataFrame:
     """Read daily_bars into a long Polars panel.
 
@@ -40,10 +41,17 @@ def load_panel(
         tickers: restrict to these tickers. None = every ticker in the table.
         start, end: inclusive date bounds. None = unbounded.
         dsn: override the connection string (defaults to settings.db_dsn).
+        columns: which of BAR_COLUMNS to read. The agent needs only ticker, ts
+            and close; reading all nine on five years of data is the
+            difference between fitting a 512 MB server and being killed by it.
 
     Returns:
-        Frame with columns BAR_COLUMNS, sorted by (ticker, ts).
+        Frame with the requested columns, sorted by (ticker, ts).
     """
+    unknown = [c for c in columns if c not in BAR_COLUMNS]
+    if unknown or not {"ticker", "ts"} <= set(columns):
+        raise ValueError(f"columns must be a subset of {BAR_COLUMNS} including ticker and ts; got {list(columns)}")
+    schema = {c: _SCHEMA[c] for c in columns}
     where, params = [], []
     if tickers:
         where.append("ticker = ANY(%s)")
@@ -55,7 +63,7 @@ def load_panel(
         where.append("ts <= %s")
         params.append(end)
 
-    sql = f"SELECT {', '.join(BAR_COLUMNS)} FROM daily_bars"
+    sql = f"SELECT {', '.join(columns)} FROM daily_bars"
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY ticker, ts"
@@ -64,9 +72,9 @@ def load_panel(
         rows = conn.execute(sql, params).fetchall()
 
     if not rows:
-        return pl.DataFrame(schema=_SCHEMA)
+        return pl.DataFrame(schema=schema)
 
-    return pl.DataFrame(rows, schema=_SCHEMA, orient="row")
+    return pl.DataFrame(rows, schema=schema, orient="row")
 
 
 def load_prices(

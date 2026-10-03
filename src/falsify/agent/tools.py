@@ -29,6 +29,7 @@ paid for in turns, and turns are the budget.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -86,6 +87,10 @@ MAX_COST_BPS = 100.0
 # measured value, and every output carries it as a labelled field so no number
 # leaves this module pretending the input was observed.
 TRIAL_VARIANCE = 0.0009
+
+# The only bar columns any tool reads. Loading the other six costs memory and
+# buys nothing; see fetch_data.
+PANEL_COLUMNS: tuple[str, ...] = ("ticker", "ts", "close")
 
 
 class ToolError(Exception):
@@ -491,7 +496,16 @@ def fetch_data(
             f"unknown universe {universe!r}. Available: {', '.join(UNIVERSES)}"
         )
 
-    frame = load_panel(tickers, start, end)
+    # MEMORY, on the hosted live server only. FALSIFY_PANEL_START is unset
+    # everywhere else, so published results and local runs see every year.
+    # Five years with every bar column peaked at ~700 MB in a three-idea run
+    # and the 512 MB free server was killed mid-run (4 Oct 2026). The floor
+    # applies even when the model asks for an earlier start: it is a resource
+    # limit, not a research choice, and the digest says it was applied.
+    floor = os.environ.get("FALSIFY_PANEL_START") or None
+    if floor and (start is None or str(start) < floor):
+        start = floor
+    frame = load_panel(tickers, start, end, columns=PANEL_COLUMNS)
     if frame.is_empty():
         raise ToolError(
             "no rows matched. Check the tickers are ingested and the date range is covered."
@@ -516,6 +530,7 @@ def fetch_data(
         "n_tickers_truncated": gated.height,
         "n_rows_dropped_by_gate": int(gated["rows_dropped"].sum()) if gated.height else 0,
         "n_thin_tail_dates_trimmed": tail.height,
+        **({"panel_start_floor": floor} if floor else {}),
     }
 
     membership = None

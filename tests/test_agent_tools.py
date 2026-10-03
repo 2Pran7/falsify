@@ -547,3 +547,32 @@ def test_dispatch_routes_every_tool(s, patched):
     bh = T.dispatch("run_backtest", {"feature_handle": fh, "n_buckets": 5}, s)["handle"]
     out = T.dispatch("analyze_results", {"backtest_handle": bh}, s)
     assert out["n_trials_used"] == 1
+
+
+# --- memory guard for the hosted server (4 Oct 2026: 5 years killed 512 MB) ---
+
+
+def test_fetch_data_reads_only_the_columns_the_tools_use(s, monkeypatch):
+    seen = {}
+
+    def fake(*a, **k):
+        seen.update(k)
+        return _panel()
+
+    monkeypatch.setattr(T, "load_panel", fake)
+    T.fetch_data(s)
+    assert tuple(seen["columns"]) == ("ticker", "ts", "close")
+
+
+def test_the_panel_floor_applies_only_when_set_and_cannot_be_undercut(s, monkeypatch):
+    calls = []
+    monkeypatch.setattr(T, "load_panel", lambda tickers, start, end, **k: calls.append(start) or _panel())
+    monkeypatch.delenv("FALSIFY_PANEL_START", raising=False)
+    out = T.fetch_data(s)
+    assert calls[-1] is None and "panel_start_floor" not in out
+
+    monkeypatch.setenv("FALSIFY_PANEL_START", "2023-07-01")
+    out = T.fetch_data(s, start="2021-01-01")
+    assert calls[-1] == "2023-07-01" and out["panel_start_floor"] == "2023-07-01"
+    T.fetch_data(s, start="2024-01-01")
+    assert calls[-1] == "2024-01-01"

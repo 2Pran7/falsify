@@ -15,6 +15,7 @@ Run locally:  uvicorn falsify.live.app:app --reload
 """
 from __future__ import annotations
 
+import datetime as dt
 import hmac
 import os
 from typing import Any
@@ -133,8 +134,22 @@ import threading  # noqa: E402
 _submit_lock = threading.Lock()
 
 
+def default_panel_floor(today: "dt.date", years: float) -> str:
+    """The earliest date the live server loads: `years` before today."""
+    return (today - dt.timedelta(days=int(365.25 * years))).isoformat()
+
+
 def _from_env() -> FastAPI:
     from anthropic import Anthropic
+
+    # The hosted server has 512 MB. Live runs see the most recent
+    # LIVE_PANEL_YEARS of prices (default 3.25: one year of warm-up for the
+    # 12-month features plus two and a quarter invested). The published
+    # results on the site are computed offline on the full history.
+    os.environ.setdefault(
+        "FALSIFY_PANEL_START",
+        default_panel_floor(dt.date.today(), float(os.environ.get("LIVE_PANEL_YEARS", "3.25"))),
+    )
 
     origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
     return create_app(
