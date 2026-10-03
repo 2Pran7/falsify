@@ -177,6 +177,20 @@ def main() -> None:
         f"{universe['ts'].min()} to {universe['ts'].max()}"
     )
 
+    # --- one quality gate, applied to both runs -----------------------------
+    # BEFORE the coverage check, not after. The coverage check exists to find
+    # holes nobody explained; a reused ticker IS explained, and the gate cuts
+    # it at the splice. Checking coverage on the raw panel blocked the 5-year
+    # run on INFO, FB and SBNY, three splices the gate was about to remove.
+    # Coverage is now measured on exactly the panel both runs will use.
+    gate_name = "whole_sample" if args.whole_sample_gate else "point_in_time"
+    gate = drop_suspect_tickers if args.whole_sample_gate else truncate_suspect_tickers
+    universe, excluded = gate(universe)
+    verb = "excluded" if args.whole_sample_gate else "truncated at first defect"
+    print(f"\nquality gate ({gate_name}): {excluded.height} ticker(s) {verb}, BOTH runs")
+    for r in excluded.iter_rows(named=True):
+        print(f"  {r['ticker']:<6} {r['reason']:<14} {r['detail']}")
+
     # --- point-in-time membership ------------------------------------------
     snapshots = parse_snapshots(read_revisions(sync_repo(), since=args.since))
     if snapshots.is_empty():
@@ -196,6 +210,14 @@ def main() -> None:
     cov = coverage_report(membership, universe)
     kinds = _classify_missing(membership, universe)
     never = cov.filter(pl.col("n_price_days") == 0)["ticker"].to_list()
+    # A member the splice gate cut is absent from BOTH runs, so it cannot make
+    # the point-in-time leg thinner than the biased one. The block below exists
+    # for members missing from the honest leg only, which shrink the measured
+    # gap; a reused ticker (FB->META, ABC->COR) is a different case and is
+    # reported, not blocked. Found on the first 5-year run, 4 Oct 2026.
+    gated = set(excluded["ticker"].to_list())
+    gated_members = sorted(t for t in never if t in gated)
+    never = [t for t in never if t not in gated]
     interior = _tickers_with(kinds, "interior", INTERIOR_TOLERANCE_DAYS + 1)
     trailing = _tickers_with(kinds, "trailing", DELISTING_MIN_DAYS)
     leading = _tickers_with(kinds, "leading", DELISTING_MIN_DAYS)
@@ -203,6 +225,9 @@ def main() -> None:
     print(f"\nCOVERAGE: {cov.height} point-in-time members checked")
     print(f"  fully covered:                 {cov.filter(pl.col('missing_days') == 0).height}")
     print(f"  no prices at all:              {len(never)}   <- blocks")
+    if gated_members:
+        print(f"  cut by the splice gate:        {len(gated_members)}   (absent from BOTH runs: "
+              f"{', '.join(gated_members)})")
     print(f"  interior holes >{INTERIOR_TOLERANCE_DAYS}d:            {interior.height}   <- blocks")
     print(f"  price history ends early:      {trailing.height}   (delistings, expected)")
     print(f"  price history starts late:     {leading.height}   (ingest window, expected)")
@@ -237,15 +262,6 @@ def main() -> None:
         if not args.force:
             raise SystemExit("\nRefusing to report a gap on incomplete coverage. --force overrides.")
         print("\n  --force: reporting anyway. THIS NUMBER UNDER-MEASURES THE BIAS.")
-
-    # --- one quality gate, applied to both runs -----------------------------
-    gate_name = "whole_sample" if args.whole_sample_gate else "point_in_time"
-    gate = drop_suspect_tickers if args.whole_sample_gate else truncate_suspect_tickers
-    universe, excluded = gate(universe)
-    verb = "excluded" if args.whole_sample_gate else "truncated at first defect"
-    print(f"\nquality gate ({gate_name}): {excluded.height} ticker(s) {verb}, BOTH runs")
-    for r in excluded.iter_rows(named=True):
-        print(f"  {r['ticker']:<6} {r['reason']:<14} {r['detail']}")
 
     biased_panel = universe.filter(pl.col("ticker").is_in(list(current_members)))
 
