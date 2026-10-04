@@ -131,6 +131,19 @@ INJECTIONS = [
      "",
      "tests/test_diagnostics.py"),
 
+    # --- publishing a live run --------------------------------------------
+    ("a live run is published without passing every check",
+     "src/falsify/live/store.py",
+     '    if row["status"] != "done" or not isinstance(note, dict) or not note.get("publishable"):',
+     '    if False:',
+     "tests/test_live_publish.py"),
+
+    ("the export carries the whole live row, visitor and name included",
+     DEMO,
+     "    rec = {k: note[k] for k in _LIVE_NOTE_FIELDS if k in note}",
+     "    rec = {**row, **note}",
+     "tests/test_live_publish.py"),
+
     # --- the export's refusals --------------------------------------------
     ("export accepts rows scored against an edited registry",
      DEMO, "    if stale:", "    if False:", TD),
@@ -149,8 +162,8 @@ INJECTIONS = [
 
     ("export drops unpublishable notes (highlight reel)",
      DEMO,
-     "(_note_record(n) for n in notes)",
-     "(_note_record(n) for n in notes if n.publishable)",
+     "[_note_record(n) for n in notes]",
+     "[_note_record(n) for n in notes if n.publishable]",
      TD),
 
     ("NaN reaches the JSON and blanks the page",

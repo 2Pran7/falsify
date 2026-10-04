@@ -9,7 +9,7 @@ import type { NoteView } from "@/lib/types";
 type Row = {
   run_id: string; created_at: string; finished_at: string | null; visitor: string; display_name: string | null;
   hypothesis: string; status: string; note: (NoteView & { tool_errors?: { tool: string; error: string }[] }) | null;
-  error: string | null; cost_usd: number;
+  error: string | null; cost_usd: number; published?: boolean;
 };
 type Payload = { runs: Row[]; spent_today_usd: number; limits: { daily_usd_cap: number; daily_run_cap: number; per_visitor_cap: number } };
 
@@ -33,6 +33,26 @@ export function AdminClient() {
     } catch {
       setError("Couldn't reach the server. If it was idle, it takes about a minute to wake.");
     } finally { setLoading(false); }
+  }
+
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function setPublished(r: Row, published: boolean) {
+    setBusy(r.run_id); setError(null);
+    try {
+      const res = await fetch(`${API_URL}/admin/runs/${r.run_id}/publish`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ published }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? String(res.status));
+      }
+      setData((d) => d && { ...d, runs: d.runs.map((x) => (x.run_id === r.run_id ? { ...x, published } : x)) });
+    } catch (e) {
+      setError(`Could not update: ${e instanceof Error ? e.message : "unknown error"}`);
+    } finally { setBusy(null); }
   }
 
   useEffect(() => {
@@ -62,6 +82,11 @@ export function AdminClient() {
             <div className="stat"><div className="v">${data.spent_today_usd.toFixed(2)}<small> / ${data.limits.daily_usd_cap.toFixed(2)}</small></div><div className="k">Spent today, incl. reservations for unfinished runs</div></div>
             <div className="stat"><div className="v">{new Set(data.runs.map((r) => r.visitor)).size}</div><div className="k">Distinct visitors (hashed, no IPs stored)</div></div>
           </div>
+          <p className="hint" style={{ marginTop: 16 }}>
+            &quot;Add to notes&quot; marks a run that passed every check for the public notes page. It appears there after
+            the next <code>export_demo.py</code> and push. The visitor&apos;s name and id are never published.
+          </p>
+          {error && <div className="error">{error}</div>}
           <div style={{ display: "flex", gap: 10, margin: "20px 0 12px" }}>
             <button className="btn" onClick={() => load(token)} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
             <button className="btn" onClick={() => { try { sessionStorage.removeItem(KEY); } catch {} setData(null); setToken(""); }}>Lock</button>
@@ -85,6 +110,16 @@ export function AdminClient() {
                     <td>
                       <Chip kind={r.status} />
                       {r.note && <div style={{ marginTop: 4 }}><Chip kind={r.note.publishable ? "publishable" : "refused"} /></div>}
+                      {r.status === "done" && r.note?.publishable && (
+                        <button
+                          className="btn"
+                          style={{ marginTop: 6, padding: "3px 10px", fontSize: ".8rem" }}
+                          disabled={busy === r.run_id}
+                          onClick={(e) => { e.stopPropagation(); setPublished(r, !r.published); }}
+                        >
+                          {busy === r.run_id ? "Saving…" : r.published ? "✓ In notes · remove" : "Add to notes"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

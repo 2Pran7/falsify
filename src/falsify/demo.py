@@ -158,8 +158,40 @@ def _note_record(n: Note) -> dict[str, Any]:
                 "cost_usd": n.run.cost_usd,
             },
             "assumptions": n.assumptions,
+            "source": "research",
         }
     )
+
+
+# What a published live note may carry. An allow-list, not a deny-list: a field
+# added to the live record later stays private until someone adds it here.
+_LIVE_NOTE_FIELDS = (
+    "eval_key", "prose", "publishable", "unpublishable_reasons", "backtests",
+    "verdict", "provenance", "run", "assumptions",
+)
+
+
+def live_note_record(row: dict) -> dict[str, Any]:
+    """A live_run row the owner published, as a note for the page.
+
+    Carries the question and the pipeline's note. Never the visitor id, the
+    name they left, or the raw tool errors, which can name tables and hosts.
+    Refuses a row that is not published or whose note did not pass every
+    check, so a store bug cannot publish what the owner did not approve.
+    """
+    note = row.get("note")
+    if not row.get("published"):
+        raise ExportError(f"live run {row.get('run_id')} is not published")
+    if row.get("status") != "done" or not isinstance(note, dict) or not note.get("publishable"):
+        raise ExportError(f"live run {row.get('run_id')} did not pass every publication check")
+    rec = {k: note[k] for k in _LIVE_NOTE_FIELDS if k in note}
+    rec.update(
+        note_id=str(row["run_id"]),
+        created_at=row["created_at"],
+        hypothesis=row["hypothesis"],
+        source="live",
+    )
+    return _clean(rec)
 
 
 def _check_survivorship(s: dict | None) -> None:
@@ -188,6 +220,7 @@ def build_snapshot(
     anomalies: tuple[Anomaly, ...] = ANOMALIES,
     allow_partial: bool = False,
     now: dt.datetime | None = None,
+    live_rows: list[dict] = (),
 ) -> dict[str, Any]:
     """Everything the page renders, as one JSON-safe dict.
 
@@ -200,6 +233,7 @@ def build_snapshot(
         anomalies: the registry; the default is the frozen suite.
         allow_partial: export with verdicts missing, and say which.
         now: injected for tests.
+        live_rows: live_run rows the owner published (`list_published`).
 
     Raises:
         ExportError: any condition in the module docstring.
@@ -238,7 +272,9 @@ def build_snapshot(
         )
 
     rendered_notes = sorted(
-        (_note_record(n) for n in notes), key=lambda x: x["created_at"], reverse=True
+        [_note_record(n) for n in notes] + [live_note_record(r) for r in live_rows],
+        key=lambda x: str(x["created_at"]),
+        reverse=True,
     )
     n_pub = sum(1 for n in rendered_notes if n["publishable"])
     run_dates = [r["run_at"] for r in eval_rows if r.get("run_at") is not None]

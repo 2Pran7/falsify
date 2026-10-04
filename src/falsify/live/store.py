@@ -3,6 +3,11 @@
 Two implementations with one interface: Postgres for the server, memory for
 tests. Deliberately NOT research_note: export_demo.py reads research_note, and
 a stranger's hypothesis must never reach the public page by that route.
+
+The ONE route from here to the public page is `published`, a flag only the
+owner can set (POST /admin/runs/{id}/publish), and only on a run whose note
+passed every publication check. export_demo.py reads `list_published` and
+carries the note and the question, never the visitor id or the name.
 """
 from __future__ import annotations
 
@@ -32,13 +37,28 @@ CREATE TABLE IF NOT EXISTS live_run (
     cost_usd      DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_live_run_created ON live_run (created_at DESC);
+ALTER TABLE live_run ADD COLUMN IF NOT EXISTS published BOOLEAN NOT NULL DEFAULT false;
 """
 
 STATUSES = ("queued", "running", "done", "failed")
 _COLS = (
     "run_id, created_at, finished_at, visitor, display_name, hypothesis, "
-    "status, note, error, cost_usd"
+    "status, note, error, cost_usd, published"
 )
+
+
+class NotPublishable(Exception):
+    """Only a finished run whose note passed every check may be published."""
+
+
+def _check_publishable(row: dict | None) -> None:
+    if row is None:
+        raise NotPublishable("No such run.")
+    note = row.get("note")
+    if row["status"] != "done" or not isinstance(note, dict) or not note.get("publishable"):
+        raise NotPublishable(
+            "Only a finished run whose note passed every publication check can be published."
+        )
 
 
 def _now() -> dt.datetime:
@@ -64,6 +84,7 @@ class MemoryStore:
                 "run_id": rid, "created_at": now or _now(), "finished_at": None,
                 "visitor": visitor, "display_name": name, "hypothesis": hypothesis,
                 "status": "queued", "note": None, "error": None, "cost_usd": RUN_RESERVE_USD,
+                "published": False,
             }
         return rid
 
@@ -97,6 +118,20 @@ class MemoryStore:
         with self.lock:
             rs = sorted(self.rows.values(), key=lambda r: r["created_at"], reverse=True)
             return [dict(r) for r in rs[:limit]]
+
+    def set_published(self, rid: str, published: bool) -> None:
+        with self.lock:
+            row = self.rows.get(rid)
+            if published:
+                _check_publishable(row)
+            elif row is None:
+                raise NotPublishable("No such run.")
+            row["published"] = bool(published)
+
+    def list_published(self) -> list[dict]:
+        with self.lock:
+            rs = [r for r in self.rows.values() if r["published"]]
+            return [dict(r) for r in sorted(rs, key=lambda r: r["created_at"])]
 
     def fail_unfinished(self, reason: str) -> int:
         n = 0
@@ -182,6 +217,21 @@ class PgStore:
 
     def list_all(self, limit: int = 200) -> list[dict]:
         return self._rows(f"SELECT {_COLS} FROM live_run ORDER BY created_at DESC LIMIT %s", (limit,))
+
+    def set_published(self, rid: str, published: bool) -> None:
+        row = self.get(rid)
+        if published:
+            _check_publishable(row)
+        elif row is None:
+            raise NotPublishable("No such run.")
+        with self._c() as c:
+            c.execute("UPDATE live_run SET published=%s WHERE run_id=%s", (bool(published), rid))
+            c.commit()
+
+    def list_published(self) -> list[dict]:
+        return self._rows(
+            f"SELECT {_COLS} FROM live_run WHERE published ORDER BY created_at", ()
+        )
 
     def fail_unfinished(self, reason: str) -> int:
         with self._c() as c:

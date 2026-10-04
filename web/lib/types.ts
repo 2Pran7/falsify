@@ -83,6 +83,8 @@ export interface NoteView {
   backtests: BacktestView[];
   /** Absent on snapshots exported before the verdict card existed. */
   verdict?: VerdictCard;
+  /** "live" for a visitor's run the owner published; absent on older snapshots. */
+  source?: "research" | "live";
   provenance: {
     ok: boolean;
     checked: number;
