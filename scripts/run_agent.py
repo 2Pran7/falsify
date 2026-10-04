@@ -110,7 +110,7 @@ def _print_stats(result) -> None:
     n = session.n_backtests
     print(f"\nWHAT THE PIPELINE ACTUALLY COMPUTED  (all rows deflated at N={n})")
     print(
-        f"  {'backtest':<11}{'variant':<28}{'Sharpe':>8}"
+        f"  {'backtest':<11}{'variant':<38}{'Sharpe':>8}"
         f"{'P(SR>0)':>10}{'P(beats N)':>12}{'MinTRL':>10}"
     )
     for h in handles:
@@ -118,17 +118,24 @@ def _print_stats(result) -> None:
         variant = (
             f"{s['feature']}, {s['n_buckets']}b, "
             f"{'L/S' if s['long_short'] else 'long-only'}"
+            f"{', low long' if s.get('prediction') == 'bottom_beats_top' else ''}"
         )
         try:
             stats = analyze_results(session, h, n_trials=n)
         except ToolError as exc:
-            print(f"  {h:<11}{variant:<28}  analysis failed: {exc}")
+            print(f"  {h:<11}{variant:<38}  analysis failed: {exc}")
             continue
         print(
-            f"  {h:<11}{variant:<28}{s['sharpe']:>8.2f}"
+            f"  {h:<11}{variant:<38}{s['sharpe']:>8.2f}"
             f"{stats['prob_sharpe_above_zero']:>10.3f}"
             f"{stats['prob_beats_best_of_n_trials']:>12.3f}"
-            f"{stats['min_track_record_length_days']:>10.0f}"
+            # None when the Sharpe is at or below zero: the track record
+            # never arrives. Printed as "never", which is what it means.
+            + (
+                f"{'never':>10}"
+                if stats["min_track_record_length_days"] is None
+                else f"{stats['min_track_record_length_days']:>10.0f}"
+            )
         )
 
     print(
