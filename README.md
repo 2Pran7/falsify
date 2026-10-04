@@ -15,14 +15,19 @@ worth solving is building one that refuses to.
 | Backtester | Return accounting, portfolio construction, performance metrics | Complete, 46 tests |
 | Statistics | Walk-forward splits, deflated Sharpe, FDR correction, survivorship audit | Complete, 111 tests |
 | Agent | Model-driven hypothesis to experiment to research note, four tools, five cost guards | Complete |
+| Verdict and diagnostics | Supported / not confirmed / contradicted as a computed property; bucket staircase, cost sensitivity, equity curve | Complete |
 | Research notes | Verified notes persisted to Postgres, publishable rule, markdown rendering | Complete |
 | Eval suite | Six published anomalies, pre-registered and hashed; four-rule scoring; universe argument | Complete. **5-year results: 0 of 6 survive, on both universes** |
 | Demo | Frozen verdicts and notes on a static Next.js page, plus capped live runs (FastAPI on Render, Neon) | Complete. [falsify-ten.vercel.app](https://falsify-ten.vercel.app) |
 
-Full suite: **587 passing** on a populated database (three tests need
+Full suite: **620 passing** on a populated database (three of those need
 ingested SPY prices and skip without them). Every new suite from Module 3 onward was validated by injecting the
 bug it claims to catch: `scripts/inject_module6.py` catches 19 of 19 and
-`scripts/inject_module7.py` 16 of 16, and CI runs both on every push.
+`scripts/inject_module7.py` 23 of 23, and CI runs both on every push.
+
+**Live demo: [falsify-ten.vercel.app](https://falsify-ten.vercel.app)** — the
+frozen verdicts, the research notes including the refused ones, and a capped
+*Try it live* page that runs the real agent loop on a hypothesis you type.
 
 **The headline result.** Reconstructing point-in-time S&P 500 membership from
 the git history of the constituents CSV (194 dated snapshots back to 2012, no
@@ -79,21 +84,50 @@ dates with a handful of names each, and a decile sort over four names is noise
 traded as a strategy. Only the tail is trimmed; interior holes are left for the
 coverage checks to report.
 
-**The model decides, and that is enforced rather than asserted.** Four
+**The model decides, and that is enforced rather than asserted.** Six
 mechanisms, in increasing order of strength: the tool menu is closed (a dict of
 pre-bound callables, never a `getattr` on a model-supplied string); arguments
 are validated before dispatch and unknown keys are rejected rather than
 ignored; results cross to the model as summaries under a 2,000-byte enforced
-cap, never as payloads; and every numeral in a research note must appear in, or
+cap, never as payloads; every numeral in a research note must appear in, or
 be a permitted transform of, a number the model was actually shown
-(`agent/provenance.py`). Percent, rounding, days-to-years and sign are
-permitted transforms; differences, ratios and sums are not, because those are
-arithmetic.
+(`agent/provenance.py`); a note is publishable only if provenance passed, the
+run completed and the analysis was actually called; and the predictions in the
+eval suite are hashed before the runs. Percent, rounding, days-to-years and sign
+are permitted transforms; differences, ratios and sums are not, because those
+are arithmetic.
 
-The fourth mechanism is what makes the claim falsifiable, and its limitation is
-stated in its own docstring: **provenance checks numbers, not claims.** A note
-in which every figure is traceable and the conclusion is wrong passes
+The provenance mechanism is what makes the claim falsifiable, and its limitation
+is stated in its own docstring: **provenance checks numbers, not claims.** A
+note in which every figure is traceable and the conclusion is wrong passes
 completely, and the first real run did exactly that.
+
+**It does not check comparisons either, so comparisons became pipeline fields.**
+A later run traced all sixteen of its numerals and still wrote that a deflation
+probability of 0.9688 was "below the 0.95 bar". Every figure was real and the
+inequality was backwards. The fix was not a wider checker: `analyze_results` now
+returns `confirmation_gate` and `clears_confirmation_gate`, computed by the
+pipeline, and the system prompt instructs the model to report that field rather
+than compare the numbers itself. An injection that inverts the gate verdict is
+part of the audit.
+
+**The same applies to the one-line answer.** The verdict a reader sees —
+*supported*, *not confirmed*, *contradicted* — is a computed property of the
+note like `publishable`, never a stored field, so an edited row cannot claim a
+different one. The headline backtest it describes is chosen by rule (the first
+analysed long/short run with a declared prediction), not by the model. The
+bucket returns and their Spearman "staircase" score, the Sharpe of each half,
+the Sharpe at 0, 10 and 25 bps, and the equity curve are all computed in
+`backtest/diagnostics.py` and rendered as charts; the model sees only rounded
+digests and never the curve. It writes the commentary, and the page says which
+is which.
+
+**An agent that narrates a step has not taken it.** One live run ended with the
+text "Now I'll run the rigour analysis" and no call to `analyze_results`; the
+publishable rule refused the note, correctly. The loop now sends exactly one
+reminder when a model tries to finish with unanalysed backtests, and if it stops
+anyway the refusal stands. Two injections cover it: the reminder never being
+sent, and the reminder repeating until the model complies.
 
 **Correctness is established by controls, not by inspection.** The engine test
 suite includes a positive control (a perfect-foresight signal must produce an
@@ -116,7 +150,7 @@ docker compose up -d        # TimescaleDB; schema applies on first run
 Verify:
 
 ```bash
-pytest -q                                   # 556 passing, 3 more once SPY is ingested
+pytest -q                                   # full suite; 3 tests need ingested SPY prices
 python scripts/run_ingest.py AAPL MSFT      # two-ticker smoke test
 
 docker exec -it falsify-db psql -U falsify -c \
@@ -183,6 +217,11 @@ Disclosed rather than hidden, and quantified in the survivorship audit:
 - **There is no benchmark tool**, so a long-only result's market beta cannot be
   separated out. A long-only Sharpe is not a test of a cross-sectional
   hypothesis; the long/short spread is.
+- **The staleness guard protects the predictions, not the data.** The export
+  refuses a verdict scored against an edited registry, but it cannot tell that
+  the *panel* changed underneath a stored row — which happened once, when the
+  site was exported before the evals were re-run on the trimmed panel. Stamping
+  the panel end date on each verdict row is the open fix.
 - **Turnover accounting** uses the un-halved convention and ignores weight drift
   between rebalances.
 - **The risk-free rate** is a scalar rather than a daily series.
@@ -200,6 +239,7 @@ src/falsify/
   backtest/portfolio.py     signal to weights: decile sorts, rebalancing
   backtest/engine.py        weights to daily return series
   backtest/metrics.py       Sharpe, CAGR, volatility, drawdown
+  backtest/diagnostics.py   bucket staircase, half-sample Sharpe, cost sensitivity, curve
   data/pit_universe.py      point-in-time membership from the constituents git log
   data/quality.py           splice and gap detection; the point-in-time gate
   stats/walkforward.py      walk-forward splits with no leakage across a boundary
@@ -217,16 +257,25 @@ src/falsify/
   eval/score.py             pass / partial / fail / insufficient_data, with reasons
   eval/runner.py            the suite, run through the same tools the agent uses
   eval/store.py             verdicts in Postgres, keyed by (anomaly, universe)
+  live/app.py               FastAPI: the public Try-it-live endpoint and /admin
+  live/limits.py            worst-case reservation, daily cap, per-visitor cap
+  live/store.py             live_run rows, kept apart from research_note
+  live/worker.py            runs the agent loop off the request thread
   demo.py                   stored evidence -> one frozen JSON, refusing anything misleading
 scripts/validate_stats.py   the statistics re-derived by simulation, not unit test
 scripts/run_agent.py        one hypothesis end to end; prints and stores what it cost
 scripts/show_notes.py       read notes back with no API key and no spend
 scripts/run_evals.py        the eval suite: --compare, --check, --store, --registry
+scripts/run_survivorship.py the headline audit: current vs point-in-time, same window
+scripts/build_pit_universe.py  membership snapshots recovered from the constituents git log
 scripts/diagnose_membership.py  snapshot gaps, member-day clusters, membership resolution
 scripts/ingest_dropped.py   prices for the names that LEFT the index
+scripts/diagnose.py         attribution, concentration and best/worst-day sensitivity
 scripts/inject_module6.py   the nineteen-injection audit, re-runnable
-scripts/inject_module7.py   fourteen more: the splice gate, the ragged end, every export refusal
+scripts/inject_module7.py   twenty-three more: the splice gate, the ragged end, the
+                            declared prediction, the gate verdict, every export refusal
 scripts/export_demo.py      Postgres -> web/data/demo.json for the static page
+scripts/sync_live_db.py     copy the panel to the hosted database for live runs
 web/                        Next.js static export; renders data/demo.json, computes nothing
 tests/                      synthetic data with hand-computed expected values
 db/schema.sql               daily_bars, universe_snapshot, ingest_log, research_note,
@@ -266,11 +315,24 @@ results, or nobody would ever fix one.
 | `idiosyncratic_volatility` | Ang et al. (2006) | `ivol_63d` | −1 | 0.60 | 63d |
 | `fifty_two_week_high` | George & Hwang (2004) | `pct_52w_high` | +1 | 0.55 | 252d |
 
-**Direction is the load-bearing field.** `run_backtest` always goes long the top
-bucket and short the bottom, so its Sharpe is the sign of the spread — and four
-of these six predict that spread to be *negative*. Without a sign fixed in
-advance, "the spread was −0.6" is unscoreable, and the temptation is to look at
-the number and then decide which way the paper said it should run.
+**Direction is the load-bearing field**, and getting it wrong was a real bug
+rather than a hypothetical one. `run_backtest` used to go long the top bucket
+and short the bottom unconditionally, so for the four of these six that predict
+the *bottom* bucket wins, a correct effect printed a negative Sharpe — and the
+deflated probability was then computed on that negative series. **A genuine
+low-volatility or reversal effect could never have cleared the gate, and a
+wrong-way spread could.** The eval suite was unaffected, because it orients each
+anomaly by its registered direction, but the agent path was not.
+
+`run_backtest` now takes a `prediction` (`top_beats_bottom` or
+`bottom_beats_top`) that must be declared before the result exists. The signal
+is negated before ranking, so the portfolio is long the predicted winners,
+transaction costs follow the real turnover, and `runs_as_predicted` is simply
+the sign of that strategy's Sharpe. Flipping the prediction flips the Sharpe and
+leaves the buckets unchanged, which is a test; "the declared prediction is
+recorded but never built" is an injection. Without a sign fixed in advance, "the
+spread was −0.6" is unscoreable, and the temptation is to look at the number and
+then decide which way the paper said it should run.
 
 **The rule: sign, then deflation, then multiplicity. Magnitude is reported,
 never gated — except downward.** A spread more than 3× the published reference
@@ -404,8 +466,12 @@ that visitor only.
 
 - **The owner pays, under a hard cap.** Each run reserves its worst-case cost
   ($0.45) the moment it is queued, and a run starts only if that reservation
-  still fits under the daily dollar cap, so the cap is never crossed. On top:
-  25 runs a day in total and 3 per visitor.
+  still fits under the $2 daily cap, so the cap is never crossed rather than
+  noticed afterwards. On top: 25 runs a day in total and 10 per visitor.
+- **The server is allowed to be asleep.** Free hosting spins down, so the page
+  wakes the server and retries for up to two minutes instead of showing an
+  error, and a free external ping keeps it warm during the day. Tested by
+  bringing the server up mid-request.
 - **Visitors see only their own run.** It is readable only by its random id.
   Live runs are stored in `live_run`, never `research_note`, so
   `export_demo.py` cannot put a stranger's text on the public page.
