@@ -227,8 +227,9 @@ def measured_trial_variance(analyses: dict[str, dict]) -> float | None:
     IT IS REPORTED, NOT SUBSTITUTED. Replacing a labelled assumption with an
     unlabelled estimate from six points is not an improvement; six is far too
     few for a variance, and the substitution would be invisible in every number
-    downstream of it. Revisit after the backfill, when the six run on five
-    years instead of two.
+    downstream of it. On the five-year panel the measured value (about 0.0010
+    on today's constituents, 0.0005 point-in-time) brackets the assumed 0.0009,
+    which is the evidence the assumption is reasonable rather than flattering.
 
     Per-period, not annualised, because that is the unit
     `expected_max_sharpe` consumes -- an annualised variance is 252 times too

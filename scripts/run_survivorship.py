@@ -310,7 +310,8 @@ def main() -> None:
     print(
         "\n  LOWER BOUND. A cash acquisition stops having prices, so the delisting\n"
         "  return is missing from the point-in-time run too. The true bias is larger.\n"
-        "  DIAGNOSTIC ONLY on this window — publishable after the M6 backfill."
+        "  Membership is accurate to the local snapshot spacing; see\n"
+        "  scripts/diagnose_membership.py for the worst gap inside this window."
     )
 
     if args.save:

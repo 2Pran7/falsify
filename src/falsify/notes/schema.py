@@ -429,8 +429,8 @@ def from_run(
         # Companies that were dropped or delisted are absent, so every return
         # in this note is overstated by survivorship bias.
         #
-        # The project measures that bias — 20.18% against 10.02% on a common
-        # window, Sharpe 0.68 against 0.45 — but `stats/survivorship.py` is
+        # The project measures that bias (on five years, 79.8% against 24.9%,
+        # Sharpe 0.66 against 0.35), but `stats/survivorship.py` is
         # reachable only from `scripts/run_survivorship.py`, never from the
         # agent. A note quoted without this line looks like a point-in-time
         # result and is not one.

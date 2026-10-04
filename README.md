@@ -16,23 +16,33 @@ worth solving is building one that refuses to.
 | Statistics | Walk-forward splits, deflated Sharpe, FDR correction, survivorship audit | Complete, 111 tests |
 | Agent | Model-driven hypothesis to experiment to research note, four tools, five cost guards | Complete |
 | Research notes | Verified notes persisted to Postgres, publishable rule, markdown rendering | Complete |
-| Eval suite | Six published anomalies, pre-registered and hashed; four-rule scoring; universe argument | Harness complete, 120 tests. **Results blocked on a longer panel** |
-| Demo | Frozen eval verdicts and research notes, served as a static Next.js page; point-in-time splice gate | Complete, 34 tests, 14 injections |
+| Eval suite | Six published anomalies, pre-registered and hashed; four-rule scoring; universe argument | Complete. **5-year results: 0 of 6 survive, on both universes** |
+| Demo | Frozen verdicts and notes on a static Next.js page, plus capped live runs (FastAPI on Render, Neon) | Complete. [falsify-ten.vercel.app](https://falsify-ten.vercel.app) |
 
-Full suite: **525 passing, 34 skipped** on a fresh clone with no database;
-**556 passing, 3 skipped** with Postgres up (the three need ingested SPY
-prices). Every new suite from Module 3 onward was validated by injecting the
+Full suite: **587 passing** on a populated database (three tests need
+ingested SPY prices and skip without them). Every new suite from Module 3 onward was validated by injecting the
 bug it claims to catch: `scripts/inject_module6.py` catches 19 of 19 and
-`scripts/inject_module7.py` 14 of 14, and CI runs both on every push.
+`scripts/inject_module7.py` 16 of 16, and CI runs both on every push.
 
 **The headline result.** Reconstructing point-in-time S&P 500 membership from
-the git history of the constituents CSV — 193 dated snapshots back to 2012, no
-paid data and no API calls — shows that **survivorship bias accounted for
-roughly half the headline momentum return**: 20.18% against 10.02% over a
-common 239-day invested window, Sharpe 0.68 against 0.45. Volatility and max
-drawdown barely moved (41.6% vs 39.3%, -33.2% vs -33.4%), which is the
-signature that matters: the invisible companies were not adding risk, they were
-removing return that was never earned.
+the git history of the constituents CSV (194 dated snapshots back to 2012, no
+paid membership data) shows that on five years of prices, **survivorship bias
+accounts for more than two thirds of the headline momentum return**: 79.8%
+against 24.9% over a common 984-day invested window (Oct 2022 to Oct 2026),
+CAGR 16.2% against 5.9%, Sharpe 0.66 against 0.35. Volatility and max drawdown
+barely moved (29.4% vs 27.2%, -34.1% vs -32.8%): the invisible companies were
+not adding risk, they were removing return that was never earned.
+
+**Two independent code paths agree.** The eval suite measures the same
+strategy through the agent's tools and gets 0.62 against 0.35 (+0.28) over the
+same window, against +0.31 from `scripts/run_survivorship.py`.
+
+**The bias is not one-directional.** Across the six anomalies it nets to about
+zero: it inflates strategies that buy past winners (momentum +0.28) and
+penalises the defensive ones (low volatility -0.27, idiosyncratic volatility
+-0.26), because a list of today's survivors is a list of past winners. On
+long-term reversal it **flips the sign**: +0.08 on today's list, -0.26 on
+point-in-time membership.
 
 The measured gap is a **lower bound**. Restoring a dropped name is not the same
 as capturing its delisting return — a cash acquisition simply stops having
@@ -143,12 +153,28 @@ Disclosed rather than hidden, and quantified in the survivorship audit:
   side, and does not substitute one for the other**: replacing a labelled
   assumption with an unlabelled six-point estimate would be invisible in every
   number downstream of it.
-- **The eval-suite RESULTS are not yet results.** The harness runs; the panel
-  under it is roughly two years of one up market, of which the first year is
-  momentum warmup. Six anomalies on ~250 invested days of a single regime
-  cannot support a published claim, and the suite is built to say so —
-  `insufficient_data` is a separate outcome from `fail` — rather than to fill
-  the table. Nothing in `eval_result` is quotable until the panel lengthens.
+- **Five years is still one sample.** The eval suite now runs on 1,255 trading
+  days including the 2022 bear market, and none of the six anomalies survives
+  deflation and multiple-testing correction on either universe. That is a
+  result about this window and this implementation (monthly rebalance, price
+  returns, a market-only residual), not a refutation of the papers.
+- **Membership has a 444-day blind spot inside the panel.** The constituents
+  file has no commits between 2021-10-06 and 2022-12-24, so 28 removals in that
+  stretch are dated to the snapshot that closed it. Acquired names stop having
+  prices and drop out regardless; the real error is demoted names that kept
+  trading, held for up to 444 days too long. For 12-1 momentum it overlaps only
+  the first ~2 months of trading, because the feature needs a year of history.
+- **Reused tickers cost whole companies.** The splice gate keeps a ticker's
+  earliest occupant and drops what follows, so renames where the new ticker
+  previously belonged to someone else (FB to META, ABC to COR) remove the
+  renamed company from both runs: Meta after mid-2022, Cencora, Coherent,
+  EchoStar, and BNY after a vendor data gap. Both runs lose them equally, so the
+  gap is compared like for like. The fix is re-keying a reused ticker as a new
+  instrument, with membership mapped by date.
+- **Live runs see three years, not five.** The hosted server has 512 MB, and a
+  five-year, three-idea run peaked near 700 MB. Live runs read three columns of
+  the most recent ~3.25 years (`FALSIFY_PANEL_START`); the published results
+  are computed offline on the full history. The Try page says so.
 - **The splice gate truncates rather than re-keys.** The rows after a
   ticker's first defect may be a genuine successor company, and they are
   dropped rather than treated as a new instrument. That costs sample, not
@@ -295,17 +321,18 @@ failure mode that fails by looking healthy.
 ### Membership resolution, and why it is quoted rather than claimed away
 
 Point-in-time membership here is reconstructed from the commit history of a
-maintained CSV: **193 dated snapshots from December 2012**, recovered by
+maintained CSV: **194 dated snapshots from December 2012**, recovered by
 `scripts/build_pit_universe.py` for the cost of a clone. The join is
 backward-only — each date inherits the most recent snapshot at or before it —
 so **a removal is dated to the next snapshot, never to the day it happened.**
 
 That makes the error on any membership date equal to the local snapshot
-spacing, and the spacing is not uniform. Over the current priced window the
-median is a few weeks and **the worst case is 204 days**: the maintainers
-committed nothing between 2025-08-12 and 2026-03-04, so every index removal in
-that stretch is recorded as happening on 2026-03-04. Thirteen tickers share
-exactly the same membership end date for that reason.
+spacing, and the spacing is not uniform. Over the five-year priced window there
+are 137 snapshots, the **median spacing is 5 days** and **the worst case is 444
+days**: the maintainers committed nothing between 2021-10-06 and 2022-12-24, so
+every index removal in that stretch is recorded as happening on 2022-12-24 (28
+tickers share that end date). A second gap, 204 days to 2026-03-04, does the
+same to 11 more.
 
 **This is a source limitation, not an ingest bug**, and re-running the backfill
 confirmed it: the commits do not exist. So it is disclosed and bounded rather

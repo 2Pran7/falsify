@@ -134,7 +134,8 @@ def print_run(run) -> None:
     print(
         "  NOT substituted. Six points is far too few for a variance, and replacing a\n"
         "  labelled assumption with an unlabelled estimate would be invisible in every\n"
-        "  number downstream of it. Revisit after the backfill."
+        "  number downstream of it. On five years the measured value sits close to\n"
+        "  the assumption, which is the evidence the assumption is reasonable."
     )
 
 
