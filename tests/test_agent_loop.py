@@ -479,3 +479,14 @@ def test_no_reminder_without_backtests_or_after_analysis(patched):
         response([text_block("Insufficient.")], "end_turn"),
     )))
     assert done.analysis_nudges == 0
+
+
+def test_text_before_the_verdict_line_is_cut_and_text_without_it_is_kept():
+    from types import SimpleNamespace as NS
+
+    from falsify.agent.loop import _text_of
+
+    blocks = [NS(type="text", text="Only one backtest ran, so...\n\n**Verdict:** Not confirmed.")]
+    assert _text_of(blocks) == "**Verdict:** Not confirmed."
+    plain = [NS(type="text", text="The evidence is insufficient.")]
+    assert _text_of(plain) == "The evidence is insufficient."

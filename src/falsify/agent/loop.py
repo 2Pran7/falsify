@@ -145,6 +145,11 @@ shape, the two halves, the cost sensitivity.
 overturn the verdict: a longer sample, the point-in-time universe, a specific \
 control.
 
+Write the note once, as a finished document: no corrections in passing \
+("... actually"), no em dashes, and no derived quantities in words either \
+("fell by a third", "twice as large"), because those are arithmetic too. In \
+the gate column write Yes or No.
+
 Keep it under 350 words. Report honestly. "The evidence is insufficient" is a \
 legitimate and frequent answer, and a short sample with a high Sharpe is \
 usually exactly that. Do not dress up a weak result.
@@ -253,8 +258,21 @@ def _cached_tools() -> list[dict[str, Any]]:
     return schemas
 
 
+VERDICT_MARKER = "**Verdict:**"
+
+
 def _text_of(content: list[Any]) -> str:
-    return "".join(b.text for b in content if getattr(b, "type", None) == "text").strip()
+    """The model's text, starting at the verdict line when there is one.
+
+    The note template starts at "**Verdict:**", and the model sometimes says
+    something first ("This is the only backtest I ran, so..."). That preamble
+    is talk to the tool loop, not part of the note, so it is cut here, once,
+    before provenance runs. Text without the marker is kept whole: a refusal
+    or a partial answer must reach the record exactly as written.
+    """
+    text = "".join(b.text for b in content if getattr(b, "type", None) == "text").strip()
+    at = text.find(VERDICT_MARKER)
+    return text[at:] if at > 0 else text
 
 
 def _tool_uses(content: list[Any]) -> list[Any]:
