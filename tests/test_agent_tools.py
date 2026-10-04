@@ -576,3 +576,15 @@ def test_the_panel_floor_applies_only_when_set_and_cannot_be_undercut(s, monkeyp
     assert calls[-1] == "2023-07-01" and out["panel_start_floor"] == "2023-07-01"
     T.fetch_data(s, start="2024-01-01")
     assert calls[-1] == "2024-01-01"
+
+
+
+def test_the_gate_comparison_is_made_by_the_pipeline_not_the_model(with_feature):
+    """4 Oct 2026: a live note called 0.9688 'below the 0.95 bar'. The verdict is
+    now a field, so the model reports a boolean instead of comparing numbers."""
+    s, ph, fh = with_feature
+    bh = T.run_backtest(s, fh)["handle"]
+    out = T.analyze_results(s, bh)
+    assert out["confirmation_gate"] == 0.95
+    assert out["clears_confirmation_gate"] is (out["prob_beats_best_of_n_trials"] >= 0.95)
+    assert "never compare" in out["gate_note"]

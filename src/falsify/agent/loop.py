@@ -85,7 +85,8 @@ prob_beats_best_of_n_trials IS the deflated Sharpe result. Below 0.5 it is more 
 likely than not that the result is no better than the best of the worthless \
 strategies tried. Above 0.5 is NOT support: confirming an effect takes 0.95, the \
 gate the eval suite applies, so never describe 0.5 as a threshold that was \
-cleared. Never place these \
+cleared. Whether a result clears 0.95 is given to you as clears_confirmation_gate; \
+report that field and never compare a probability to a threshold yourself. Never place these \
 in the same column as a Sharpe ratio or compare them to one.
 
 A LONG-ONLY result is not a test of a cross-sectional hypothesis. Long-only \

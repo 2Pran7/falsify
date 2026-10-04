@@ -47,6 +47,7 @@ from falsify.backtest.portfolio import (
 )
 from falsify.data.pit_universe import membership_panel
 from falsify.data.quality import trim_ragged_end, truncate_suspect_tickers
+from falsify.eval.score import DEFLATION_THRESHOLD as CONFIRMATION_GATE
 from falsify.features import library as feat
 from falsify.stats import deflated
 from falsify.stats.survivorship import restrict_to_members
@@ -847,6 +848,20 @@ def analyze_results(
             "confirming an effect takes 0.95, the eval suite's gate, and anything "
             "between is not support. Never tabulate these beside a "
             "Sharpe ratio as though they shared units."
+        ),
+        # THE COMPARISON IS THE PIPELINE'S, NOT THE MODEL'S. A live note on
+        # 4 Oct 2026 read prob_beats_best_of_n_trials = 0.9688 and wrote "below
+        # the 0.95 bar". Every numeral traced, so provenance passed; the
+        # comparison was wrong. Comparing a number to a threshold is
+        # computation, and the model does not compute.
+        "confirmation_gate": CONFIRMATION_GATE,
+        "clears_confirmation_gate": bool(dsr >= CONFIRMATION_GATE),
+        "gate_note": (
+            "clears_confirmation_gate is computed by the pipeline: report it as "
+            "given and never compare the probabilities to a threshold yourself. "
+            "A spread running OPPOSITE to the hypothesis is not a finding even if "
+            "it clears the gate, because that direction was not the prediction "
+            "being tested."
         ),
         "n_trials_note": (
             f"n_trials_used={used} is the count AS OF THIS CALL. Running further "

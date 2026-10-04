@@ -88,6 +88,12 @@ INJECTIONS = [
      "            and result.analysis_nudges < 5",
      "tests/test_agent_loop.py"),
 
+    ("the gate verdict is inverted",
+     "src/falsify/agent/tools.py",
+     '        "clears_confirmation_gate": bool(dsr >= CONFIRMATION_GATE),',
+     '        "clears_confirmation_gate": bool(dsr < CONFIRMATION_GATE),',
+     "tests/test_agent_tools.py"),
+
     # --- the export's refusals --------------------------------------------
     ("export accepts rows scored against an edited registry",
      DEMO, "    if stale:", "    if False:", TD),
