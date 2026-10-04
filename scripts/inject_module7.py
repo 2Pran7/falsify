@@ -94,6 +94,43 @@ INJECTIONS = [
      '        "clears_confirmation_gate": bool(dsr < CONFIRMATION_GATE),',
      "tests/test_agent_tools.py"),
 
+    # --- the predicted direction, the diagnostics, the verdict card --------
+    ("the declared prediction is recorded but never built",
+     "src/falsify/agent/tools.py",
+     '        signal = signal.with_columns((-pl.col("sig")).alias("sig"))',
+     '        signal = signal',
+     "tests/test_diagnostics.py"),
+
+    ("buckets are numbered high signal first",
+     "src/falsify/backtest/diagnostics.py",
+     '        pl.col("sig").rank("ordinal").over("ts")',
+     '        pl.col("sig").rank("ordinal", descending=True).over("ts")',
+     "tests/test_diagnostics.py"),
+
+    ("bucket membership is re-read daily, not held",
+     "src/falsify/backtest/diagnostics.py",
+     '        strategy="backward",\n    ).drop_nulls("period")',
+     '        strategy="forward",\n    ).drop_nulls("period")',
+     "tests/test_diagnostics.py"),
+
+    ("cost sensitivity ignores the turnover",
+     "src/falsify/backtest/diagnostics.py",
+     '        r = g["gross_ret"] - g["turnover"] * bps / 10_000.0',
+     '        r = g["gross_ret"]',
+     "tests/test_diagnostics.py"),
+
+    ("the verdict ignores the direction",
+     "src/falsify/notes/schema.py",
+     "        elif not as_predicted:",
+     "        elif False:",
+     "tests/test_diagnostics.py"),
+
+    ("the headline is the first backtest, even a long-only one",
+     "src/falsify/notes/schema.py",
+     "            lambda b: b.long_short and b.metrics.get(\"prediction_declared\"),\n            lambda b: b.long_short,\n",
+     "",
+     "tests/test_diagnostics.py"),
+
     # --- the export's refusals --------------------------------------------
     ("export accepts rows scored against an edited registry",
      DEMO, "    if stale:", "    if False:", TD),

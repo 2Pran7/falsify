@@ -142,9 +142,11 @@ def _note_record(n: Note) -> dict[str, Any]:
                     "metrics": b.metrics,
                     "statistics": b.statistics,
                     "analysis_error": b.analysis_error,
+                    "diagnostics": b.diagnostics,
                 }
                 for b in n.backtests
             ],
+            "verdict": n.verdict,
             "provenance": d["provenance"],
             "run": {
                 "model": n.run.model,

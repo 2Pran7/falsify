@@ -36,6 +36,7 @@ from typing import Any
 import polars as pl
 
 from falsify.agent.session import Session, SessionError
+from falsify.backtest import diagnostics as diag
 from falsify.backtest import metrics as m
 from falsify.backtest.engine import BacktestConfig
 from falsify.backtest.engine import run_backtest as engine_run_backtest
@@ -79,6 +80,10 @@ FEATURES: dict[str, str] = {
 UNIVERSES: tuple[str, ...] = ("current", "point_in_time")
 
 REBALANCE_FREQUENCIES: tuple[str, ...] = ("monthly",)
+
+# Which end of the sort the hypothesis says wins. Declared on run_backtest,
+# BEFORE the result exists, so the direction cannot be chosen after the fact.
+PREDICTIONS: tuple[str, ...] = ("top_beats_bottom", "bottom_beats_top")
 
 MIN_BUCKETS, MAX_BUCKETS = 2, 20
 MAX_COST_BPS = 100.0
@@ -252,6 +257,20 @@ _SPECS: dict[str, dict[str, Any]] = {
                 "type": "number",
                 "description": f"One-way transaction cost in basis points, 0 to {MAX_COST_BPS}.",
             },
+            "prediction": {
+                "type": "string",
+                "enum": list(PREDICTIONS),
+                "description": (
+                    "Which end of the sort the HYPOTHESIS says wins, taken from the "
+                    "question as asked, before any result is seen. ALWAYS pass it. "
+                    "'top_beats_bottom': high feature values outperform (momentum, "
+                    "52-week high). 'bottom_beats_top': low values outperform (low "
+                    "volatility, reversal). The strategy is built in the predicted "
+                    "direction: long the predicted winners, short the predicted losers. "
+                    "A positive Sharpe then means the prediction held and a negative one "
+                    "means it ran the wrong way. Default top_beats_bottom."
+                ),
+            },
         },
         "required": ["feature_handle"],
         "types": {
@@ -260,6 +279,7 @@ _SPECS: dict[str, dict[str, Any]] = {
             "long_short": bool,
             "rebalance": str,
             "cost_bps": (int, float),
+            "prediction": str,
         },
     },
     "analyze_results": {
@@ -395,6 +415,9 @@ def validate_arguments(tool_name: str, arguments: dict[str, Any]) -> dict[str, A
         r = arguments.get("rebalance", "monthly")
         if r not in REBALANCE_FREQUENCIES:
             raise ToolError(f"rebalance must be one of {REBALANCE_FREQUENCIES}, got {r!r}")
+        p = arguments.get("prediction", PREDICTIONS[0])
+        if p not in PREDICTIONS:
+            raise ToolError(f"prediction must be one of {PREDICTIONS}, got {p!r}")
     if tool_name == "analyze_results" and "n_trials" in arguments:
         if arguments["n_trials"] < 1:
             raise ToolError("n_trials must be at least 1")
@@ -638,6 +661,7 @@ def run_backtest(
     long_short: bool = True,
     rebalance: str = "monthly",
     cost_bps: float = 10.0,
+    prediction: str | None = None,
 ) -> dict[str, Any]:
     """Sort on the feature, build weights, and run the engine.
 
@@ -649,10 +673,25 @@ def run_backtest(
             or long the top bucket only.
         rebalance: currently only "monthly".
         cost_bps: one-way transaction cost in basis points, 0 to 100.
+        prediction: which end of the sort the hypothesis says wins. The
+            strategy is built long the predicted winners, so a positive Sharpe
+            always means "ran as predicted". None means not declared, built
+            as top_beats_bottom, and recorded as undeclared.
 
     Returns:
         `handle` plus `metrics.summary` over the INVESTED window, plus
-        n_invested_days and the trial count so far this run.
+        n_invested_days, the trial count so far this run, and the compact
+        diagnostics (bucket returns, two halves, cost sensitivity). The
+        equity curve goes in the payload only.
+
+    WHY THE DIRECTION IS BUILT IN, not reported afterwards. Until Module 7's
+    last change the strategy was always long the top bucket, so a hypothesis
+    that the BOTTOM wins (low volatility, reversal) produced a negative Sharpe
+    when it was right, and its deflated probability was computed on the wrong
+    sign: a correct low-volatility effect could never clear the gate, and a
+    wrong-way spread could. Negating the signal before ranking flips both legs
+    and the cost charge follows the real turnover, so every number downstream
+    is about the strategy the hypothesis actually describes.
 
     Raises:
         ToolError: bad handle, out-of-range parameters, or a feature that
@@ -698,7 +737,12 @@ def run_backtest(
                 "dates and the snapshot dates do not overlap."
             )
 
-    rebal = pl.DataFrame({"ts": month_end_dates(signal["ts"])})
+    raw_signal = signal
+    if prediction == "bottom_beats_top":
+        signal = signal.with_columns((-pl.col("sig")).alias("sig"))
+
+    rebal_dates = month_end_dates(signal["ts"])
+    rebal = pl.DataFrame({"ts": rebal_dates})
     targets = decile_weights(signal.join(rebal, on="ts", how="semi"), n_buckets, long_short)
     weights = hold_until_next_rebalance(targets, frame["ts"].unique())
     if weights.is_empty():
@@ -715,6 +759,20 @@ def run_backtest(
     invested_dates = weights.select("ts").unique()
     invested = res.returns.join(invested_dates, on="ts", how="semi").sort("ts")
 
+    diagnostics = diag.compute(
+        frame.select(["ticker", "ts", "close"]),
+        raw_signal,
+        rebal_dates,
+        invested,
+        res.turnover,
+        n_buckets,
+    )
+
+    if prediction == "bottom_beats_top":
+        legs = "long the bottom bucket, short the top" if long_short else "long the bottom bucket"
+    else:
+        legs = "long the top bucket, short the bottom" if long_short else "long the top bucket"
+
     summary = {
         **{k: round(v, 6) for k, v in m.summary(invested["ret"]).items()},
         "feature": art.summary["feature"],
@@ -725,10 +783,20 @@ def run_backtest(
         "n_buckets": n_buckets,
         "long_short": long_short,
         "cost_bps": cost_bps,
+        "prediction": prediction or PREDICTIONS[0],
+        "prediction_declared": prediction is not None,
+        "legs": legs,
         "n_invested_days": len(invested),
+        "first_invested_date": str(invested["ts"].min()) if len(invested) else None,
+        "last_invested_date": str(invested["ts"].max()) if len(invested) else None,
         "n_names_traded": weights["ticker"].n_unique(),
+        **diag.model_view(diagnostics),
     }
-    handle = session.put("backtest", {"result": res, "invested": invested}, summary)
+    handle = session.put(
+        "backtest",
+        {"result": res, "invested": invested, "diagnostics": diagnostics},
+        summary,
+    )
     return {"handle": handle, **summary, "n_trials_so_far": session.n_backtests}
 
 
@@ -774,6 +842,7 @@ def analyze_results(
         raise ToolError(str(exc)) from exc
 
     returns = payload["invested"]["ret"]
+    summary = session.summary(backtest_handle, "backtest")
 
     observed = session.n_backtests
     requested = n_trials
@@ -856,12 +925,18 @@ def analyze_results(
         # computation, and the model does not compute.
         "confirmation_gate": CONFIRMATION_GATE,
         "clears_confirmation_gate": bool(dsr >= CONFIRMATION_GATE),
+        # Direction, also the pipeline's. The backtest was built long the
+        # predicted winners, so the sign of its Sharpe IS the answer to "did it
+        # run as predicted", and the model is handed the boolean rather than
+        # asked to read a sign.
+        "prediction": summary.get("prediction"),
+        "prediction_declared": bool(summary.get("prediction_declared", False)),
+        "runs_as_predicted": bool(st["sr"] > 0),
         "gate_note": (
-            "clears_confirmation_gate is computed by the pipeline: report it as "
-            "given and never compare the probabilities to a threshold yourself. "
-            "A spread running OPPOSITE to the hypothesis is not a finding even if "
-            "it clears the gate, because that direction was not the prediction "
-            "being tested."
+            "clears_confirmation_gate and runs_as_predicted are computed by the "
+            "pipeline: report them as given and never compare a probability to a "
+            "threshold yourself. The backtest was built in the predicted direction, "
+            "so runs_as_predicted=false means the effect ran the wrong way."
         ),
         "n_trials_note": (
             f"n_trials_used={used} is the count AS OF THIS CALL. Running further "

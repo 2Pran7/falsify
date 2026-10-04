@@ -17,7 +17,7 @@ export default function Notes() {
       </p>
       <div className="table-card scroll" style={{ marginTop: 32 }}>
         <table>
-          <thead><tr><th>Hypothesis</th><th>Date</th><th>Model</th><th>Cost</th><th>Status</th></tr></thead>
+          <thead><tr><th>Hypothesis</th><th>Verdict</th><th>Date</th><th>Cost</th><th>Status</th></tr></thead>
           <tbody>
             {items.map((n) => (
               <tr key={n.note_id}>
@@ -25,8 +25,8 @@ export default function Notes() {
                   <Link href={`/notes/${n.note_id}/`} className="cell-title">{n.hypothesis}</Link>
                   {!n.publishable && <div className="cell-sub">{n.unpublishable_reasons[0]}</div>}
                 </td>
+                <td>{n.verdict ? <Chip kind={n.verdict.outcome} /> : <span className="muted small">n/a</span>}</td>
                 <td className="num">{day(n.created_at)}</td>
-                <td className="small">{n.run.model}</td>
                 <td className="num">${n.run.cost_usd.toFixed(3)}</td>
                 <td><Chip kind={n.publishable ? "publishable" : "refused"} /></td>
               </tr>

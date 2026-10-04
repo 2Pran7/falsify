@@ -33,11 +33,43 @@ export interface AnomalyRow {
   survivorship_sharpe_gap: number | null;
 }
 
+export interface Diagnostics {
+  buckets?: { bucket: number; ann_return: number | null; n_days: number }[];
+  monotonicity?: number | null;
+  halves?: { first_date: string; last_date: string; sharpe: number | null; n_days: number }[];
+  costs?: { cost_bps: number; sharpe: number | null; cagr: number | null }[];
+  equity?: { ts: string; equity: number }[];
+}
+
 export interface BacktestView {
   variant: string;
   metrics: Record<string, unknown>;
   statistics: Record<string, unknown>;
   analysis_error: string | null;
+  /** Absent on notes recorded before diagnostics existed. */
+  diagnostics?: Diagnostics;
+}
+
+/** Computed by the pipeline from stored numbers, never written by the model. */
+export interface VerdictCard {
+  outcome: "supported" | "not_confirmed" | "contradicted" | "no_verdict";
+  label: string;
+  reason: string;
+  variant?: string;
+  prediction?: string | null;
+  prediction_declared?: boolean;
+  long_short?: boolean;
+  sharpe?: number | null;
+  prob_beats_best_of_n_trials?: number | null;
+  clears_confirmation_gate?: boolean;
+  n_trials?: number | null;
+  n_invested_days?: number | null;
+  first_date?: string | null;
+  last_date?: string | null;
+  universe?: string | null;
+  monotonicity?: number | null;
+  both_halves_as_predicted?: boolean | null;
+  survives_25bps?: boolean | null;
 }
 
 export interface NoteView {
@@ -49,6 +81,8 @@ export interface NoteView {
   publishable: boolean;
   unpublishable_reasons: string[];
   backtests: BacktestView[];
+  /** Absent on snapshots exported before the verdict card existed. */
+  verdict?: VerdictCard;
   provenance: {
     ok: boolean;
     checked: number;

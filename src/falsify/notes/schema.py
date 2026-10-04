@@ -181,6 +181,10 @@ class BacktestRecord:
     metrics: dict[str, Any] = field(default_factory=dict)
     statistics: dict[str, Any] = field(default_factory=dict)
     analysis_error: str | None = None
+    # Bucket returns, two halves, cost sensitivity, equity curve: see
+    # backtest/diagnostics.py. Empty on a note recorded before they existed,
+    # and every reader treats empty as "not computed", never as zero.
+    diagnostics: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.handle:
@@ -195,7 +199,8 @@ class BacktestRecord:
     def variant(self) -> str:
         """How this backtest is named in a table. Built, never stored."""
         side = "long/short" if self.long_short else "long-only"
-        return f"{self.feature}, {self.n_buckets} buckets, {side}"
+        flip = ", low signal long" if self.metrics.get("prediction") == "bottom_beats_top" else ""
+        return f"{self.feature}, {self.n_buckets} buckets, {side}{flip}"
 
     @property
     def analysed(self) -> bool:
@@ -294,6 +299,111 @@ class Note:
         """Computed, never stored as an assertion, so it cannot be forged."""
         return not self.unpublishable_reasons
 
+    # -- the verdict card --------------------------------------------------
+    @property
+    def headline(self) -> BacktestRecord | None:
+        """The backtest the verdict is about. Chosen by rule, not by the model.
+
+        The first ANALYSED long/short backtest that declared a prediction: the
+        first trial is the direct test of the question, and later ones are
+        variants. Falls back to the first analysed long/short, then the first
+        analysed of any kind. None if nothing was analysed.
+        """
+        analysed = [b for b in self.backtests if b.analysed]
+        for pick in (
+            lambda b: b.long_short and b.metrics.get("prediction_declared"),
+            lambda b: b.long_short,
+            lambda b: True,
+        ):
+            for b in analysed:
+                if pick(b):
+                    return b
+        return None
+
+    @property
+    def verdict(self) -> dict[str, Any]:
+        """The card at the top of the note. Every field computed, none written.
+
+        The model's prose is the least reliable part of a run, so the one-line
+        answer a reader takes away is not left to it. The outcome is decided by
+        two pipeline booleans, in this order:
+
+            not analysed              -> no_verdict
+            runs_as_predicted false   -> contradicted
+            clears gate               -> supported
+            otherwise                 -> not_confirmed
+
+        A computed property, like `publishable`, so an old note gets a verdict
+        from its stored numbers and a stored row cannot claim a different one.
+        """
+        b = self.headline
+        if b is None:
+            return {
+                "outcome": "no_verdict",
+                "label": "No verdict",
+                "reason": "No backtest was analysed, so there is no deflated figure to judge.",
+            }
+        st, mt, dg = b.statistics, b.metrics, b.diagnostics
+        sharpe = st.get("sharpe_annualised", mt.get("sharpe"))
+        as_predicted = st.get("runs_as_predicted")
+        if as_predicted is None and sharpe is not None:
+            as_predicted = float(sharpe) > 0
+        clears = st.get("clears_confirmation_gate")
+        if clears is None and st.get("prob_beats_best_of_n_trials") is not None:
+            from falsify.eval.score import DEFLATION_THRESHOLD
+
+            clears = float(st["prob_beats_best_of_n_trials"]) >= DEFLATION_THRESHOLD
+        declared = bool(mt.get("prediction_declared", False))
+        if not declared:
+            # A run recorded before predictions were declared was always built
+            # long the top bucket, whatever the question said. Its sign cannot
+            # be read as "as predicted", so no direction is claimed for it.
+            as_predicted = None
+            if clears:
+                outcome, label = "no_verdict", "Direction not declared"
+                reason = "Clears the gate, but the run did not declare which end should win."
+            else:
+                outcome, label = "not_confirmed", "Not confirmed"
+                reason = "Does not survive deflation for the trials run."
+        elif not as_predicted:
+            outcome, label = "contradicted", "Contradicted"
+            reason = "The spread ran the opposite way to the prediction."
+        elif clears:
+            outcome, label = "supported", "Supported"
+            reason = "Ran as predicted and survives deflation for the trials run."
+        else:
+            outcome, label = "not_confirmed", "Not confirmed"
+            reason = "Ran as predicted, but does not survive deflation for the trials run."
+        halves = dg.get("halves") or []
+        costs = {c["cost_bps"]: c for c in dg.get("costs") or []}
+        return {
+            "outcome": outcome,
+            "label": label,
+            "reason": reason,
+            "variant": b.variant,
+            "prediction": mt.get("prediction"),
+            "prediction_declared": declared,
+            "runs_as_predicted": as_predicted,
+            "long_short": b.long_short,
+            "sharpe": sharpe,
+            "prob_beats_best_of_n_trials": st.get("prob_beats_best_of_n_trials"),
+            "clears_confirmation_gate": bool(clears),
+            "n_trials": st.get("n_trials_used"),
+            "n_invested_days": mt.get("n_invested_days"),
+            "first_date": mt.get("first_invested_date"),
+            "last_date": mt.get("last_invested_date"),
+            "universe": mt.get("universe"),
+            "monotonicity": dg.get("monotonicity"),
+            "both_halves_as_predicted": (
+                all((h.get("sharpe") or 0) > 0 for h in halves)
+                if len(halves) == 2 and declared
+                else None
+            ),
+            "survives_25bps": (
+                (costs[25]["sharpe"] or 0) > 0 if 25 in costs else None
+            ),
+        }
+
     # -- serialisation -----------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
         """JSON-safe. `publishable` is included for readers, not for reloading.
@@ -385,6 +495,8 @@ def from_run(
             stats = analyze_results(session, handle, n_trials=n_trials)
         except ToolError as exc:
             error = str(exc)
+        payload = session.payload(handle)
+        diagnostics = payload.get("diagnostics", {}) if isinstance(payload, dict) else {}
         records.append(
             BacktestRecord(
                 handle=handle,
@@ -394,6 +506,7 @@ def from_run(
                 metrics=summary,
                 statistics=stats,
                 analysis_error=error,
+                diagnostics=dict(diagnostics),
             )
         )
 

@@ -214,3 +214,48 @@ textarea:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px
 .md .md-table th, .md .md-table td { padding: 7px 10px; font-size: .85rem; }
 .md .md-table td { font-family: var(--mono); }
 .md .md-table td:first-child { font-family: var(--sans); }
+
+/* --- verdict card and charts ------------------------------------------- */
+.verdict { border: 1px solid var(--rule); border-left: 5px solid var(--c, var(--na)); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); padding: 18px 22px; margin-bottom: 14px; }
+.verdict.pass { --c: var(--pass); --cb: var(--pass-bg); }
+.verdict.partial { --c: var(--partial); --cb: var(--partial-bg); }
+.verdict.fail { --c: var(--fail); --cb: var(--fail-bg); }
+.verdict.na { --c: var(--na); --cb: var(--na-bg); }
+.verdict-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.verdict-label { font: 650 1.45rem/1.1 var(--serif); color: var(--c); background: var(--cb); padding: 4px 12px; border-radius: 8px; }
+.verdict-reason { color: var(--ink-2); font-size: .98rem; }
+.verdict-sub { font-size: .86rem; color: var(--muted); margin: 10px 0 0; }
+.verdict-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; margin: 14px 0 0; }
+.verdict-facts > div { background: var(--surface); padding: 10px 12px; }
+.verdict-facts dt { font-size: .74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.verdict-facts dd { margin: 4px 0 0; font: 600 1.05rem/1.2 var(--mono); }
+.verdict-foot { font-size: .78rem; color: var(--faint); margin: 10px 0 0; }
+@media (max-width: 720px) { .verdict-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.charts { margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 14px; }
+.chart { margin: 0 0 16px; }
+.chart figcaption { font-size: .86rem; font-weight: 600; margin-bottom: 6px; }
+.chart figcaption .muted { font-weight: 400; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .axis { stroke: var(--rule-2); stroke-width: 1; }
+.chart .axis.dash { stroke-dasharray: 4 4; }
+.chart .bar.pos { fill: var(--accent); }
+.chart .bar.neg { fill: var(--fail); opacity: .85; }
+.chart .val { font: 11px var(--mono); fill: var(--ink-2); }
+.chart .tick { font: 11px var(--mono); fill: var(--muted); }
+.chart .leg { font: 600 10px var(--sans); text-transform: uppercase; letter-spacing: .08em; }
+.chart .leg.long { fill: var(--pass); }
+.chart .leg.short { fill: var(--fail); }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.chart .line.pos { stroke: var(--accent); }
+.chart .line.neg { stroke: var(--fail); }
+.chart .area.pos { fill: var(--accent-soft); opacity: .7; }
+.chart .area.neg { fill: var(--fail-bg); opacity: .7; }
+.robust { align-items: start; }
+.mini { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.mini caption { text-align: left; font-weight: 600; padding-bottom: 6px; }
+.mini th { text-align: left; font-weight: 500; color: var(--muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--rule); padding: 4px 6px; }
+.mini td { padding: 5px 6px; border-bottom: 1px solid var(--rule); font-family: var(--mono); }
+.mini td.pos { color: var(--pass); }
+.mini td.neg { color: var(--fail); }
+@media (max-width: 720px) { .robust { grid-template-columns: 1fr; } }
