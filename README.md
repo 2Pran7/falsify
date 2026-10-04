@@ -23,11 +23,20 @@ worth solving is building one that refuses to.
 Full suite: **620 passing** on a populated database (three of those need
 ingested SPY prices and skip without them). Every new suite from Module 3 onward was validated by injecting the
 bug it claims to catch: `scripts/inject_module6.py` catches 19 of 19 and
-`scripts/inject_module7.py` 23 of 23, and CI runs both on every push.
+`scripts/inject_module7.py` 26 of 26, and CI runs both on every push.
 
-**Live demo: [falsify-ten.vercel.app](https://falsify-ten.vercel.app)** — the
-frozen verdicts, the research notes including the refused ones, and a capped
-*Try it live* page that runs the real agent loop on a hypothesis you type.
+## Links
+
+| | |
+|---|---|
+| **Live demo** | **[falsify-ten.vercel.app](https://falsify-ten.vercel.app)** |
+| The frozen eval table | [/](https://falsify-ten.vercel.app) — six anomalies, both universes, with the reason each one failed |
+| Research notes | [/notes](https://falsify-ten.vercel.app/notes) — including the ones the pipeline refused to publish, and why |
+| Try it live | [/try](https://falsify-ten.vercel.app/try) — type a hypothesis and the real agent loop runs it |
+| Owner view | [/admin](https://falsify-ten.vercel.app/admin) — every live run, its cost and its note. **Token required**; it is typed into a password field, sent as a bearer header and held in `sessionStorage`, never put in the URL |
+
+The demo pages compute nothing: they render one frozen JSON file that
+`scripts/export_demo.py` wrote from Postgres. Only *Try it live* calls a server.
 
 **The headline result.** Reconstructing point-in-time S&P 500 membership from
 the git history of the constituents CSV (194 dated snapshots back to 2012, no
@@ -272,8 +281,9 @@ scripts/diagnose_membership.py  snapshot gaps, member-day clusters, membership r
 scripts/ingest_dropped.py   prices for the names that LEFT the index
 scripts/diagnose.py         attribution, concentration and best/worst-day sensitivity
 scripts/inject_module6.py   the nineteen-injection audit, re-runnable
-scripts/inject_module7.py   twenty-three more: the splice gate, the ragged end, the
-                            declared prediction, the gate verdict, every export refusal
+scripts/inject_module7.py   twenty-six more: the splice gate, the ragged end, the
+                            declared prediction, the gate verdict, the live-run
+                            privacy boundary, every export refusal
 scripts/export_demo.py      Postgres -> web/data/demo.json for the static page
 scripts/sync_live_db.py     copy the panel to the hosted database for live runs
 web/                        Next.js static export; renders data/demo.json, computes nothing
@@ -428,7 +438,9 @@ cd web && npm ci && npm run build      # static site in web/out
 ```
 
 The build fails if `data/demo.json` is missing rather than falling back to a
-sample. Deployed on Vercel with `web` as the project root.
+sample. Deployed on Vercel with `web` as the project root: `/` is the eval table
+and the survivorship headline, `/notes` and `/notes/[id]` the stored notes,
+`/try` the live page, `/admin` the owner view.
 
 ## Research notes
 
@@ -467,7 +479,11 @@ that visitor only.
 - **The owner pays, under a hard cap.** Each run reserves its worst-case cost
   ($0.45) the moment it is queued, and a run starts only if that reservation
   still fits under the $2 daily cap, so the cap is never crossed rather than
-  noticed afterwards. On top: 25 runs a day in total and 10 per visitor.
+  noticed afterwards. The reservation is only sound because a per-run token
+  budget bounds what one run can cost. On top: 25 runs a day in total, 10 per
+  visitor, and at most 5 queued at once. A run count alone would not bound
+  spend, because a run that loops to its token budget costs several times a
+  normal one.
 - **The server is allowed to be asleep.** Free hosting spins down, so the page
   wakes the server and retries for up to two minutes instead of showing an
   error, and a free external ping keeps it warm during the day. Tested by
@@ -475,9 +491,17 @@ that visitor only.
 - **Visitors see only their own run.** It is readable only by its random id.
   Live runs are stored in `live_run`, never `research_note`, so
   `export_demo.py` cannot put a stranger's text on the public page.
-- **The owner sees everything** at `/admin` with a token: every question, the
-  optional name a visitor left, a hashed visitor id (no IPs are stored), the
-  cost and the full note.
+- **The boundary is tested from the hostile direction.** Four of the
+  twenty-six Module 7 injections attack exactly this: a refused live run
+  reaching the public notes, hiding a run failing to take it off the public
+  notes, a public note carrying the whole live row (visitor id and name
+  included), and a NaN reaching the JSON and blanking the page. All four are
+  caught.
+- **The owner sees everything** at
+  [/admin](https://falsify-ten.vercel.app/admin) with a token: every question,
+  the optional name a visitor left, a hashed visitor id (no IPs are stored),
+  the cost and the full note, plus a control to hide a run so it can never be
+  exported.
 - `scripts/sync_live_db.py --target <hosted URL>` copies `daily_bars` and
   `universe_snapshot` to the hosted database. Re-run it after every ingest.
 
