@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { Chip } from "@/components/Chip";
 import { API_URL } from "@/lib/format";
@@ -16,6 +17,13 @@ export function NotesTable({ items, limit }: { items: NoteView[]; limit?: number
   const [live, setLive] = useState<NoteView[]>([]);
   const [state, setState] = useState<"idle" | "loading" | "done" | "offline">(API_URL ? "loading" : "idle");
   const [open, setOpen] = useState<string | null>(null);
+  const router = useRouter();
+  // The whole row opens the run. A click on a link or the run-count button
+  // inside it keeps its own meaning.
+  const go = (href: string) => (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("a, button")) return;
+    router.push(href);
+  };
 
   useEffect(() => {
     if (!API_URL) return;
@@ -55,7 +63,7 @@ export function NotesTable({ items, limit }: { items: NoteView[]; limit?: number
       </p>
       <div className="table-card scroll">
         <table>
-          <thead><tr><th>Question</th><th>Verdict</th><th>Runs</th><th>First asked</th><th>Last asked</th><th>Status</th></tr></thead>
+          <thead><tr><th>Question</th><th>Verdict</th><th>Runs</th><th>First asked</th><th>Last asked</th><th>Status</th><th aria-label="Open" /></tr></thead>
           <tbody>
             {shown.map((q) => {
               const { key, lead } = q;
@@ -63,7 +71,7 @@ export function NotesTable({ items, limit }: { items: NoteView[]; limit?: number
               const isOpen = open === key;
               return (
                 <Fragment key={key}>
-                  <tr>
+                  <tr className="link" onClick={go(noteHref(lead))}>
                     <td>
                       <Link href={noteHref(lead)} className="cell-title">{lead.hypothesis}</Link>
                       <div className="cell-sub">
@@ -83,9 +91,10 @@ export function NotesTable({ items, limit }: { items: NoteView[]; limit?: number
                     <td className="num">{day(q.first)}</td>
                     <td className="num">{day(q.last)}</td>
                     <td><Chip kind={lead.publishable ? "publishable" : "refused"} /></td>
+                    <td className="view"><Link href={noteHref(lead)}>View →</Link></td>
                   </tr>
                   {isOpen && q.runs.map((r) => (
-                    <tr key={r.note_id} className="subrow">
+                    <tr key={r.note_id} className="subrow link" onClick={go(noteHref(r))}>
                       <td>
                         <Link href={noteHref(r)}>{r.hypothesis}</Link>
                         <span className="muted small"> · {r.source === "live" ? "live" : "research"}{r.note_id === lead.note_id ? " · shown above" : ""}</span>
@@ -94,6 +103,7 @@ export function NotesTable({ items, limit }: { items: NoteView[]; limit?: number
                       <td />
                       <td className="num" colSpan={2}>{r.created_at.slice(0, 16).replace("T", " ")} UTC</td>
                       <td><Chip kind={r.publishable ? "publishable" : "refused"} /></td>
+                      <td className="view"><Link href={noteHref(r)}>View →</Link></td>
                     </tr>
                   ))}
                 </Fragment>
