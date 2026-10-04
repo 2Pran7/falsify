@@ -25,7 +25,6 @@ overrides, and the snapshot then says `-dirty` on the page.
 from __future__ import annotations
 
 import argparse
-import os
 import json
 import pathlib
 import subprocess
@@ -56,13 +55,6 @@ def main() -> int:
                     help="JSON written by run_survivorship.py --save")
     ap.add_argument("--allow-partial", action="store_true")
     ap.add_argument("--allow-dirty", action="store_true")
-    ap.add_argument(
-        "--live-dsn",
-        default=os.environ.get("LIVE_DATABASE_URL") or None,
-        help="the live server's Postgres (Neon). Live runs you PUBLISHED from /admin "
-             "are added to the notes. Defaults to LIVE_DATABASE_URL from .env; "
-             "without it, no live runs are exported.",
-    )
     args = ap.parse_args()
 
     commit = _git("rev-parse", "--short", "HEAD")
@@ -82,15 +74,6 @@ def main() -> int:
 
     rows = eval_store.fetch_all()
     notes = notes_store.fetch_all()
-    live_rows: list[dict] = []
-    if args.live_dsn:
-        from falsify.live.store import PgStore
-
-        try:
-            live_rows = PgStore(args.live_dsn).list_published()
-        except Exception as e:  # noqa: BLE001 - reported, and the export stops
-            print(f"Refusing: could not read published live runs: {type(e).__name__}: {e}")
-            return 2
     surv = None
     if args.survivorship:
         if not args.survivorship.exists():
@@ -107,7 +90,6 @@ def main() -> int:
             code_commit=commit,
             trial_variance=T.TRIAL_VARIANCE,
             allow_partial=args.allow_partial,
-            live_rows=live_rows,
         )
     except ExportError as e:
         print(f"Refusing: {e}")
@@ -128,8 +110,6 @@ def main() -> int:
     c = snap["notes"]["counts"]
     print(f"  notes         {c['total']} total, {c['publishable']} publishable, "
           f"{c['unpublishable']} unpublishable (all exported)")
-    print(f"  live notes    {len(live_rows)} published from /admin"
-          + ("" if args.live_dsn else " (LIVE_DATABASE_URL not set, none read)"))
     print(f"  survivorship  {'included' if surv else 'NOT included (pass --survivorship)'}")
     return 0
 

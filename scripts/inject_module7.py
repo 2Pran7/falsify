@@ -131,14 +131,20 @@ INJECTIONS = [
      "",
      "tests/test_diagnostics.py"),
 
-    # --- publishing a live run --------------------------------------------
-    ("a live run is published without passing every check",
+    # --- live runs on the public notes page ---------------------------------
+    ("a refused live run reaches the public notes",
      "src/falsify/live/store.py",
-     '    if row["status"] != "done" or not isinstance(note, dict) or not note.get("publishable"):',
-     '    if False:',
+     '    return row.get("status") == "done" and isinstance(note, dict) and bool(note.get("publishable"))',
+     '    return row.get("status") == "done" and isinstance(note, dict)',
      "tests/test_live_publish.py"),
 
-    ("the export carries the whole live row, visitor and name included",
+    ("hiding a run does not take it off the public notes",
+     "src/falsify/live/store.py",
+     '    if row is None or row.get("hidden"):',
+     '    if row is None:',
+     "tests/test_live_publish.py"),
+
+    ("the public note carries the whole live row, visitor and name included",
      DEMO,
      "    rec = {k: note[k] for k in _LIVE_NOTE_FIELDS if k in note}",
      "    rec = {**row, **note}",

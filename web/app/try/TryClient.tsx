@@ -120,8 +120,8 @@ export function TryClient() {
       <h1 className="display" style={{ fontSize: "clamp(1.9rem,4vw,2.6rem)" }}>Ask it a question.</h1>
       <p className="lede">
         Type a market hypothesis. The agent picks a feature, runs the backtests on S&amp;P 500 data, deflates the result
-        for the number of things it tried, and writes a note. Expect 30 to 90 seconds. Your result is shown only to
-        you. Live runs use the most recent three years of prices so they fit a free server; the published results
+        for the number of things it tried, and writes a note. Expect 30 to 90 seconds. If the note passes every check,
+        your question and its note are added to the public notes page, without your name. Live runs use the most recent three years of prices so they fit a free server; the published results
         use all five.
       </p>
 

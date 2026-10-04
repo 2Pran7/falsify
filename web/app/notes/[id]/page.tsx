@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { NoteBody } from "@/components/NoteBody";
 import { Chip } from "@/components/Chip";
 import { day, snapshot } from "@/lib/data";
-import { otherRuns } from "@/lib/notes";
+import { noteHref, otherRuns } from "@/lib/notes";
 
 export const dynamicParams = false;
 
@@ -41,14 +41,14 @@ export default async function NotePage({ params }: { params: Promise<{ id: strin
       <div style={{ marginTop: 28 }}><NoteBody n={n} /></div>
       {others.length > 0 && (
         <>
-          <h3 className="sub">Other runs of this question</h3>
+          <h3 className="sub">Other research runs testing the same effect</h3>
           <div className="table-card scroll">
             <table>
               <thead><tr><th>Run</th><th>Verdict</th><th>Cost</th><th>Status</th></tr></thead>
               <tbody>
                 {others.map((o) => (
                   <tr key={o.note_id}>
-                    <td><Link href={`/notes/${o.note_id}/`}>{day(o.created_at)}</Link>{o.source === "live" && <span className="muted small"> · live</span>}</td>
+                    <td><Link href={noteHref(o)}>{day(o.created_at)}</Link>{o.source === "live" && <span className="muted small"> · live</span>}</td>
                     <td>{o.verdict ? <Chip kind={o.verdict.outcome} /> : <span className="muted small">n/a</span>}</td>
                     <td className="num">${o.run.cost_usd.toFixed(3)}</td>
                     <td><Chip kind={o.publishable ? "publishable" : "refused"} /></td>

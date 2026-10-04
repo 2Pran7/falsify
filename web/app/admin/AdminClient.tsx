@@ -9,7 +9,7 @@ import type { NoteView } from "@/lib/types";
 type Row = {
   run_id: string; created_at: string; finished_at: string | null; visitor: string; display_name: string | null;
   hypothesis: string; status: string; note: (NoteView & { tool_errors?: { tool: string; error: string }[] }) | null;
-  error: string | null; cost_usd: number; published?: boolean;
+  error: string | null; cost_usd: number; hidden?: boolean;
 };
 type Payload = { runs: Row[]; spent_today_usd: number; limits: { daily_usd_cap: number; daily_run_cap: number; per_visitor_cap: number } };
 
@@ -37,19 +37,19 @@ export function AdminClient() {
 
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function setPublished(r: Row, published: boolean) {
+  async function setHidden(r: Row, hidden: boolean) {
     setBusy(r.run_id); setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/runs/${r.run_id}/publish`, {
+      const res = await fetch(`${API_URL}/admin/runs/${r.run_id}/hide`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ published }),
+        body: JSON.stringify({ hidden }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? String(res.status));
       }
-      setData((d) => d && { ...d, runs: d.runs.map((x) => (x.run_id === r.run_id ? { ...x, published } : x)) });
+      setData((d) => d && { ...d, runs: d.runs.map((x) => (x.run_id === r.run_id ? { ...x, hidden } : x)) });
     } catch (e) {
       setError(`Could not update: ${e instanceof Error ? e.message : "unknown error"}`);
     } finally { setBusy(null); }
@@ -83,8 +83,8 @@ export function AdminClient() {
             <div className="stat"><div className="v">{new Set(data.runs.map((r) => r.visitor)).size}</div><div className="k">Distinct visitors (hashed, no IPs stored)</div></div>
           </div>
           <p className="hint" style={{ marginTop: 16 }}>
-            &quot;Add to notes&quot; marks a run that passed every check for the public notes page. It appears there after
-            the next <code>export_demo.py</code> and push. The visitor&apos;s name and id are never published.
+            A run that passes every check goes on the public notes page by itself. &quot;Remove from notes&quot; takes it
+            off straight away, and &quot;Put back&quot; restores it. The visitor&apos;s name and id are never shown there.
           </p>
           {error && <div className="error">{error}</div>}
           <div style={{ display: "flex", gap: 10, margin: "20px 0 12px" }}>
@@ -115,9 +115,9 @@ export function AdminClient() {
                           className="btn"
                           style={{ marginTop: 6, padding: "3px 10px", fontSize: ".8rem" }}
                           disabled={busy === r.run_id}
-                          onClick={(e) => { e.stopPropagation(); setPublished(r, !r.published); }}
+                          onClick={(e) => { e.stopPropagation(); setHidden(r, !r.hidden); }}
                         >
-                          {busy === r.run_id ? "Saving…" : r.published ? "✓ In notes · remove" : "Add to notes"}
+                          {busy === r.run_id ? "Saving…" : r.hidden ? "Removed · put back" : "Remove from notes"}
                         </button>
                       )}
                     </td>

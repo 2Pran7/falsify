@@ -4,8 +4,14 @@
     POST /runs              submit a hypothesis; returns a run id
     GET  /runs/{run_id}     poll one run; the id is the only way to read it
     GET  /admin/runs        every run, newest first; Authorization: Bearer ADMIN_TOKEN
-    POST /admin/runs/{id}/publish   {"published": true|false}; owner only, and
-                            only for a run whose note passed every check
+    POST /admin/runs/{id}/hide      {"hidden": true|false}; owner only
+    GET  /notes/live        every public live run, newest first, summarised
+    GET  /notes/live/{id}   one public live run, in full
+
+A live run is PUBLIC once it finishes with a note that passed every
+publication check, and stays public until the owner hides it. Public means
+the question and the pipeline's note: never the name, the hashed visitor id,
+or the tool errors.
 
 WHO SEES WHAT. A run id is a random UUID returned only to the visitor who
 submitted it, so reading a run requires having submitted it. There is no route
@@ -27,7 +33,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from falsify.live import limits as L
-from falsify.live.store import MemoryStore, NotPublishable, PgStore
+from falsify.demo import live_note_record, live_note_summary
+from falsify.live.store import MemoryStore, PgStore, UnknownRun, is_public
 from falsify.live.worker import Runner, Worker, agent_runner
 
 
@@ -36,8 +43,8 @@ class Submit(BaseModel):
     name: str | None = None
 
 
-class Publish(BaseModel):
-    published: bool
+class Hide(BaseModel):
+    hidden: bool
 
 
 def _public(row: dict) -> dict:
@@ -125,14 +132,25 @@ def create_app(
         if not hmac.compare_digest(given.encode(), admin_token.encode()):
             raise HTTPException(401, "Not authorised.")
 
-    @app.post("/admin/runs/{run_id}/publish")
-    def publish(run_id: str, body: Publish, authorization: str = Header(default="")) -> dict:
+    @app.post("/admin/runs/{run_id}/hide")
+    def hide(run_id: str, body: Hide, authorization: str = Header(default="")) -> dict:
         _owner(authorization)
         try:
-            store.set_published(run_id, body.published)
-        except NotPublishable as e:
-            raise HTTPException(409, str(e)) from None
-        return {"run_id": run_id, "published": body.published}
+            store.set_hidden(run_id, body.hidden)
+        except UnknownRun:
+            raise HTTPException(404, "No such run.") from None
+        return {"run_id": run_id, "hidden": body.hidden}
+
+    @app.get("/notes/live")
+    def live_notes() -> dict:
+        return {"notes": [live_note_summary(r) for r in store.list_public()]}
+
+    @app.get("/notes/live/{run_id}")
+    def live_note(run_id: str) -> dict:
+        row = store.get(run_id)
+        if not is_public(row):
+            raise HTTPException(404, "No such note.")
+        return live_note_record(row)
 
     @app.get("/admin/runs")
     def admin(authorization: str = Header(default="")) -> dict:

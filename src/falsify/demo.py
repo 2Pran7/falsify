@@ -163,7 +163,7 @@ def _note_record(n: Note) -> dict[str, Any]:
     )
 
 
-# What a published live note may carry. An allow-list, not a deny-list: a field
+# What a public live note may carry. An allow-list, not a deny-list: a field
 # added to the live record later stays private until someone adds it here.
 _LIVE_NOTE_FIELDS = (
     "eval_key", "prose", "publishable", "unpublishable_reasons", "backtests",
@@ -171,19 +171,24 @@ _LIVE_NOTE_FIELDS = (
 )
 
 
+def _require_public(row: dict) -> dict:
+    from falsify.live.store import is_public
+
+    if not is_public(row):
+        raise ExportError(
+            f"live run {row.get('run_id')} is not public: unfinished, refused, or hidden"
+        )
+    return row["note"]
+
+
 def live_note_record(row: dict) -> dict[str, Any]:
-    """A live_run row the owner published, as a note for the page.
+    """A public live_run row, as a full note for the page.
 
     Carries the question and the pipeline's note. Never the visitor id, the
     name they left, or the raw tool errors, which can name tables and hosts.
-    Refuses a row that is not published or whose note did not pass every
-    check, so a store bug cannot publish what the owner did not approve.
+    Refuses a row that is not public, so a caller bug cannot leak one.
     """
-    note = row.get("note")
-    if not row.get("published"):
-        raise ExportError(f"live run {row.get('run_id')} is not published")
-    if row.get("status") != "done" or not isinstance(note, dict) or not note.get("publishable"):
-        raise ExportError(f"live run {row.get('run_id')} did not pass every publication check")
+    note = _require_public(row)
     rec = {k: note[k] for k in _LIVE_NOTE_FIELDS if k in note}
     rec.update(
         note_id=str(row["run_id"]),
@@ -192,6 +197,21 @@ def live_note_record(row: dict) -> dict[str, Any]:
         source="live",
     )
     return _clean(rec)
+
+
+def live_note_summary(row: dict) -> dict[str, Any]:
+    """The same note for the LIST: what a table row needs, without the charts.
+
+    The equity curves are most of a full note's size, and a list of a hundred
+    runs has no use for them.
+    """
+    full = live_note_record(row)
+    return {
+        **{k: full[k] for k in ("note_id", "created_at", "hypothesis", "source",
+                                "publishable", "unpublishable_reasons", "verdict") if k in full},
+        "backtests": [{"variant": b.get("variant")} for b in full.get("backtests", [])],
+        "run": {k: full.get("run", {}).get(k) for k in ("model", "cost_usd")},
+    }
 
 
 def _check_survivorship(s: dict | None) -> None:
@@ -220,7 +240,6 @@ def build_snapshot(
     anomalies: tuple[Anomaly, ...] = ANOMALIES,
     allow_partial: bool = False,
     now: dt.datetime | None = None,
-    live_rows: list[dict] = (),
 ) -> dict[str, Any]:
     """Everything the page renders, as one JSON-safe dict.
 
@@ -233,7 +252,6 @@ def build_snapshot(
         anomalies: the registry; the default is the frozen suite.
         allow_partial: export with verdicts missing, and say which.
         now: injected for tests.
-        live_rows: live_run rows the owner published (`list_published`).
 
     Raises:
         ExportError: any condition in the module docstring.
@@ -272,7 +290,7 @@ def build_snapshot(
         )
 
     rendered_notes = sorted(
-        [_note_record(n) for n in notes] + [live_note_record(r) for r in live_rows],
+        [_note_record(n) for n in notes],
         key=lambda x: str(x["created_at"]),
         reverse=True,
     )
@@ -320,4 +338,4 @@ def build_snapshot(
 # Public name for the live API, which renders a visitor's note the same way.
 note_record = _note_record
 
-__all__ = ["ExportError", "SNAPSHOT_VERSION", "UNIVERSES", "build_snapshot", "note_record"]
+__all__ = ["ExportError", "SNAPSHOT_VERSION", "UNIVERSES", "build_snapshot", "live_note_record", "live_note_summary", "note_record"]

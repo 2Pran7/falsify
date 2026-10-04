@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Chip } from "@/components/Chip";
-import { groupNotes } from "@/lib/notes";
+import { NotesTable } from "@/components/NotesTable";
 import {
   type AnomalyRow,
   type Result,
@@ -194,23 +194,9 @@ export default function Home() {
               deflation statistics were computed. Refused notes are kept and shown with their reasons.
             </p>
           </div>
-          <Link href="/notes/" className="btn">All {groupNotes(snapshot.notes.items).length} questions</Link>
+          <Link href="/notes/" className="btn">All questions</Link>
         </div>
-        <div className="table-card scroll">
-          <table>
-            <thead><tr><th>Question</th><th>Verdict</th><th>Date</th><th>Status</th></tr></thead>
-            <tbody>
-              {groupNotes(snapshot.notes.items).slice(0, 5).map(({ key, lead: n }) => (
-                <tr key={key}>
-                  <td><Link href={`/notes/${n.note_id}/`}>{n.hypothesis}</Link></td>
-                  <td>{n.verdict ? <Chip kind={n.verdict.outcome} /> : <span className="muted small">n/a</span>}</td>
-                  <td className="num">{day(n.created_at)}</td>
-                  <td><Chip kind={n.publishable ? "publishable" : "refused"} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <NotesTable items={snapshot.notes.items} limit={5} />
       </section>
 
       <section className="section" id="method">
