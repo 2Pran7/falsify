@@ -138,8 +138,11 @@ long-only, rebalance, cost, number of trials run.
 columns: Variant | Sharpe | CAGR | Max DD | P(beats best of N) | Clears 0.95 \
 gate. Sharpe and probabilities never share a column.
 
-**Robustness:** two or three short bullets from the diagnostics: the bucket \
-shape, the two halves, the cost sensitivity.
+**Robustness:** exactly three short bullets from the diagnostics. Bucket \
+shape: the Spearman staircase score and the returns of bucket 1 and the \
+top bucket only, never the middle buckets. Two halves: the two Sharpes. Costs: \
+the Sharpe at 0 and 25 bps. Use plain words, never a raw field name such as \
+sharpe_second_half.
 
 **What would change this:** one or two sentences on the evidence that would \
 overturn the verdict: a longer sample, the point-in-time universe, a specific \
